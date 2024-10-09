@@ -81,6 +81,8 @@ type Zk struct {
 	ExecutorPayloadOutput       string
 
 	TxPoolRejectSmartContractDeployments bool
+
+	BadBatches []uint64
 }
 
 var DefaultZkConfig = &Zk{}

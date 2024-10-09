@@ -124,7 +124,7 @@ func (bs *BatchState) getBlockHeaderForcedTimestamp() uint64 {
 }
 
 func (bs *BatchState) getCoinbase(cfg *SequenceBlockCfg) common.Address {
-	if bs.isL1Recovery() {
+	if bs.batchNumber > 1 && bs.isL1Recovery() {
 		return bs.batchL1RecoveryData.recoveredBatchData.Coinbase
 	}
 
