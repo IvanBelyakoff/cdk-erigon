@@ -14,6 +14,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -817,4 +818,14 @@ func (s *SMT) insertHashNode(path []int, hash [4]uint64, root utils.NodeKey) (ut
 	}
 
 	return s.hashcalcAndSave(newIn, utils.BranchCapacity)
+}
+
+// Copy copies the SMT, by converting it into the witness first and then back to the SMT from witness.
+func (s *SMT) Copy(ctx context.Context) (*SMT, error) {
+	witness, err := BuildWitness(s, &trie.AlwaysTrueRetainDecider{}, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return BuildSMTfromWitness(witness)
 }
