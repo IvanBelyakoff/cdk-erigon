@@ -3,6 +3,7 @@ package smt
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/holiman/uint256"
@@ -17,18 +18,10 @@ import (
 var _ state.StateWriter = (*SMT)(nil)
 
 func (s *SMT) UpdateAccountData(address common.Address, _ *accounts.Account, account *accounts.Account) error {
-	if err := s.SetAccountStorage(address, account); err != nil {
-		return err
-	}
-
-	// TODO: @Stefan-Ethernal How to update:
-	// 1. the account bytecode (we have CodeHash, but not the Code itself, so how to retrieve the actual Code) and
-	// 2. the storage slots (we only have the Root, but not the storage slots themselves)
-
-	return nil
+	return s.SetAccountStorage(address, account)
 }
 
-func (s *SMT) UpdateAccountCode(address common.Address, _ uint64, codeHash common.Hash, code []byte) error {
+func (s *SMT) UpdateAccountCode(address common.Address, _ uint64, _ common.Hash, code []byte) error {
 	if len(code) == 0 {
 		return nil
 	}
@@ -37,30 +30,7 @@ func (s *SMT) UpdateAccountCode(address common.Address, _ uint64, codeHash commo
 }
 
 func (s *SMT) DeleteAccount(address common.Address, original *accounts.Account) error {
-	hexAddr := address.Hex()
-
-	keyBalance := utils.KeyEthAddrBalance(hexAddr)
-	keyNonce := utils.KeyEthAddrNonce(hexAddr)
-	keyContractCode := utils.KeyContractCode(hexAddr)
-
-	// TODO: @Stefan-Ethernal Remove contract storage, but how to retrieve the contract storage slots,
-	// iterate through them and remove them?
-	// addrBigInt := utils.ConvertHexToBigInt(address.String())
-	// keyContractStorage := utils.KeyContractStorage(utils.ScalarToArrayBig(addrBigInt), "")
-
-	if err := s.DeleteKeySource(&keyBalance); err != nil {
-		return err
-	}
-
-	if err := s.DeleteKeySource(&keyNonce); err != nil {
-		return err
-	}
-
-	if err := s.DeleteKeySource(&keyContractCode); err != nil {
-		return err
-	}
-
-	return nil
+	return errors.New("DeleteAccount is not implemented for the SMT")
 }
 
 func (s *SMT) WriteAccountStorage(address common.Address, _ uint64, key *common.Hash, _ *uint256.Int, value *uint256.Int) error {
@@ -68,8 +38,6 @@ func (s *SMT) WriteAccountStorage(address common.Address, _ uint64, key *common.
 		return nil
 	}
 
-	// TODO: @Stefan-Ethernal Check is this correct? Hopefully it would not overwrite the entire (already existing) storage.
-	// If it is going to overwrite the entire storage, how to retrieve the existing SC storage and just append the new key and value to it?
 	storageKeyString := fmt.Sprintf("0x%s", hex.EncodeToString(key.Bytes()))
 	storageMap := map[string]string{storageKeyString: value.Hex()}
 	_, err := s.SetContractStorage(address.Hex(), storageMap, nil)
