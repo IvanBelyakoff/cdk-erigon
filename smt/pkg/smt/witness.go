@@ -130,8 +130,8 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 	path := make([]int, 0)
 
 	firstNode := true
-	NodeChildCountMap := make(map[string]uint32)
-	NodesBranchValueMap := make(map[string]uint32)
+	nodeChildCountMap := make(map[string]uint32)
+	nodesBranchValueMap := make(map[string]uint32)
 
 	type nodeHash struct {
 		path []int
@@ -143,7 +143,7 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 	for i, operator := range w.Operators {
 		switch op := operator.(type) {
 		case *trie.OperatorSMTLeafValue:
-			valScaler := big.NewInt(0).SetBytes(op.Value)
+			valScaler := new(big.Int).SetBytes(op.Value)
 			addr := libcommon.BytesToAddress(op.Address)
 
 			switch op.NodeType {
@@ -167,12 +167,12 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 			}
 
 			path = path[:len(path)-1]
-			NodeChildCountMap[intArrayToString(path)] += 1
+			nodeChildCountMap[intArrayToString(path)] += 1
 
-			for len(path) != 0 && NodeChildCountMap[intArrayToString(path)] == NodesBranchValueMap[intArrayToString(path)] {
+			for len(path) != 0 && nodeChildCountMap[intArrayToString(path)] == nodesBranchValueMap[intArrayToString(path)] {
 				path = path[:len(path)-1]
 			}
-			if NodeChildCountMap[intArrayToString(path)] < NodesBranchValueMap[intArrayToString(path)] {
+			if nodeChildCountMap[intArrayToString(path)] < nodesBranchValueMap[intArrayToString(path)] {
 				path = append(path, 1)
 			}
 
@@ -193,18 +193,18 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 			if firstNode {
 				firstNode = false
 			} else {
-				NodeChildCountMap[intArrayToString(path[:len(path)-1])] += 1
+				nodeChildCountMap[intArrayToString(path[:len(path)-1])] += 1
 			}
 
 			switch op.Mask {
 			case 1:
-				NodesBranchValueMap[intArrayToString(path)] = 1
+				nodesBranchValueMap[intArrayToString(path)] = 1
 				path = append(path, 0)
 			case 2:
-				NodesBranchValueMap[intArrayToString(path)] = 1
+				nodesBranchValueMap[intArrayToString(path)] = 1
 				path = append(path, 1)
 			case 3:
-				NodesBranchValueMap[intArrayToString(path)] = 2
+				nodesBranchValueMap[intArrayToString(path)] = 2
 				path = append(path, 0)
 			}
 
@@ -214,12 +214,12 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 			nodeHashes = append(nodeHashes, nodeHash{path: pathCopy, hash: op.Hash})
 
 			path = path[:len(path)-1]
-			NodeChildCountMap[intArrayToString(path)] += 1
+			nodeChildCountMap[intArrayToString(path)] += 1
 
-			for len(path) != 0 && NodeChildCountMap[intArrayToString(path)] == NodesBranchValueMap[intArrayToString(path)] {
+			for len(path) != 0 && nodeChildCountMap[intArrayToString(path)] == nodesBranchValueMap[intArrayToString(path)] {
 				path = path[:len(path)-1]
 			}
-			if NodeChildCountMap[intArrayToString(path)] < NodesBranchValueMap[intArrayToString(path)] {
+			if nodeChildCountMap[intArrayToString(path)] < nodesBranchValueMap[intArrayToString(path)] {
 				path = append(path, 1)
 			}
 
