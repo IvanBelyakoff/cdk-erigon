@@ -157,9 +157,6 @@ func TestUpdater_CheckForInfoTreeUpdates(t *testing.T) {
 	defer mockCtrl.Finish()
 	EthermanMock := mocks.NewMockIEtherman(mockCtrl)
 
-	// header := &types.Header{Number: big.NewInt(1), Difficulty: big.NewInt(100)}
-	// mockHeader := types.NewBlockWithHeader(header)
-
 	// Define a header to be returned by our mock Ethereum calls
 	mockHeader := &types.Header{
 		Number:     big.NewInt(1),
@@ -182,7 +179,9 @@ func TestUpdater_CheckForInfoTreeUpdates(t *testing.T) {
 		AnyTimes() // Allow multiple calls to this method to always return our mock header
 
 	// Minimal configuration for the syncer (can be empty if config values are unused in this test)
-	cfg := &ethconfig.Zk{}
+	cfg := &ethconfig.Zk{
+		L1BlockRange: 2,
+	}
 
 	l1InfoTreeSyncer := syncer.NewL1Syncer(
 		ctx,
