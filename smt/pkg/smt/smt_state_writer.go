@@ -1,6 +1,7 @@
 package smt
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -50,12 +51,10 @@ func (s *SMT) CreateContract(address common.Address) error {
 
 // ApplyTraces applies a map of traces on the given SMT and returns new instance of SMT, without altering the original one.
 func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace) (*SMT, error) {
-	result := NewSMT(s.Db, false)
-	// TODO: Uncomment
-	// result, err := s.Copy(context.Background())
-	// if err != nil {
-	// 	return nil, err
-	// }
+	result, err := s.Copy(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
 	for addr, trace := range traces {
 		if trace.SelfDestructed != nil && *trace.SelfDestructed {
