@@ -196,7 +196,7 @@ func TestUpdater_CheckForInfoTreeUpdates(t *testing.T) {
 	err := updater.WarmUp(tx)
 	assert.NoError(t, err)
 
-	_, err := updater.CheckForInfoTreeUpdates(
+	_, err = updater.CheckForInfoTreeUpdates(
 		"TestUpdater_CheckForInfoTreeUpdates",
 		tx,
 	)

@@ -58,7 +58,7 @@ func TestUpdater_initialiseL1InfoTree(t *testing.T) {
 
 	// updater := NewUpdater(db)
 	// func initialiseL1InfoTree(hermezDb *hermez_db.HermezDb) (*L1InfoTree, error) {
-	l1infotree, err := initialiseL1InfoTree(db)
+	l1infotree, err := InitialiseL1InfoTree(db)
 	assert.NoError(t, err)
 	assert.NotNil(t, l1infotree)
 
@@ -71,7 +71,7 @@ func TestUpdater_createL1InfoTreeUpdate(t *testing.T) {
 	assert.NotNil(t, db)
 
 	// func createL1InfoTreeUpdate(hermezDb *hermez_db.HermezDb, l1InfoTree *L1InfoTree) (*zkTypes.L1InfoTreeUpdate, error) {
-	l1infotree, err := initialiseL1InfoTree(db)
+	l1infotree, err := InitialiseL1InfoTree(db)
 	assert.NoError(t, err)
 	assert.NotNil(t, l1infotree)
 
