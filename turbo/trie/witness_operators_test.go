@@ -5,6 +5,8 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+
 	"github.com/ugorji/go/codec"
 )
 
@@ -259,5 +261,82 @@ func TestKeySerialization(t *testing.T) {
 			t.Errorf("wrong deserialization, expected %x got %x", key, key2)
 		}
 
+	}
+}
+
+func TestOperatorSMTLeafValue_EncodeDecode(t *testing.T) {
+	tests := []struct {
+		name string
+		leaf OperatorSMTLeafValue
+	}{
+		{
+			name: "storage leaf",
+			leaf: OperatorSMTLeafValue{
+				NodeType:   utils.SC_STORAGE,
+				Address:    []byte("testAddress"),
+				StorageKey: []byte("testStorageKey"),
+				Value:      []byte("testValue"),
+			},
+		},
+		{
+			name: "non-storage leaf",
+			leaf: OperatorSMTLeafValue{
+				NodeType:   utils.KEY_BALANCE,
+				Address:    []byte("testAddress"),
+				StorageKey: nil,
+				Value:      []byte("testValue"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create marshaller and unmarshaller
+			var buf bytes.Buffer
+			marshaller := NewOperatorMarshaller(&buf)
+
+			// Encode
+			err := tt.leaf.WriteTo(marshaller)
+			if err != nil {
+				t.Fatalf("WriteTo failed: %v", err)
+			}
+
+			// Decode
+			unmarshaller := NewOperatorUnmarshaller(&buf)
+			// Read OpCode first as it would be in real scenario
+			opCode, err := unmarshaller.ReadUInt8()
+			if err != nil {
+				t.Fatalf("ReadOpCode failed: %v", err)
+			}
+			if opCode != uint8(OperatorKindCode(OpSMTLeaf)) {
+				t.Errorf("expected OpSMTLeaf (%d), got %d", OpSMTLeaf, opCode)
+			}
+
+			var decoded OperatorSMTLeafValue
+			err = decoded.LoadFrom(unmarshaller)
+			if err != nil {
+				t.Fatalf("LoadFrom failed: %v", err)
+			}
+
+			// Compare original and decoded
+			if decoded.NodeType != tt.leaf.NodeType {
+				t.Errorf("NodeType mismatch: got %v, want %v", decoded.NodeType, tt.leaf.NodeType)
+			}
+			if !bytes.Equal(decoded.Address, tt.leaf.Address) {
+				t.Errorf("Address mismatch: got %x, want %x", decoded.Address, tt.leaf.Address)
+			}
+			if !bytes.Equal(decoded.Value, tt.leaf.Value) {
+				t.Errorf("Value mismatch: got %x, want %x", decoded.Value, tt.leaf.Value)
+			}
+			if tt.leaf.NodeType == utils.SC_STORAGE {
+				if !bytes.Equal(decoded.StorageKey, tt.leaf.StorageKey) {
+					t.Errorf("StorageKey mismatch: got %x, want %x", decoded.StorageKey, tt.leaf.StorageKey)
+				}
+			} else {
+				if decoded.StorageKey != nil {
+					t.Errorf("StorageKey should be nil for non-storage leaf")
+				}
+			}
+		})
 	}
 }

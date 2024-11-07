@@ -159,9 +159,7 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 				}
 
 				stKey := hexutils.BytesToHex(op.StorageKey)
-				if len(stKey) > 0 {
-					stKey = fmt.Sprintf("0x%s", stKey)
-				}
+				stKey = fmt.Sprintf("0x%s", stKey)
 
 				storageMap[addr.String()][stKey] = valScaler.String()
 			}
@@ -265,7 +263,7 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 	for addr, storage := range storageMap {
 		_, err := s.SetContractStorage(addr, storage, nil)
 		if err != nil {
-			fmt.Println("error : unable to set contract storage", err)
+			return nil, err
 		}
 	}
 
