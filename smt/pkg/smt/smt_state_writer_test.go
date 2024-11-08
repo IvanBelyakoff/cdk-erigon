@@ -27,8 +27,12 @@ func TestSMTApplyTraces(t *testing.T) {
 	}{
 		{
 			name: "Full witness block traces",
-			file: "./testdata/zerotraces/non-empty-block.json",
+			file: "./testdata/zerotraces/full-witness-non-empty-block-trace.json",
 		},
+		// {
+		// 	name: "Empty block witness",
+		// 	file: "./testdata/zerotraces/empty-block-trace.json",
+		// },
 	}
 
 	for _, c := range cases {

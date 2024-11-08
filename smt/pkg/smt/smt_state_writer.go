@@ -49,13 +49,13 @@ func (s *SMT) CreateContract(address common.Address) error {
 }
 
 // ApplyTraces applies a map of traces on the given SMT and returns new instance of SMT, without altering the original one.
-func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace) (result *SMT, err error) {
+func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace) (*SMT, error) {
 	// result, err := s.Copy(context.Background())
 	// if err != nil {
 	// 	return nil, err
 	// }
 
-	result = s
+	result := s
 
 	for addr, trace := range traces {
 		if trace.SelfDestructed != nil && *trace.SelfDestructed {
