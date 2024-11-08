@@ -329,7 +329,11 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 				oldKey := utils.RemoveKeyBits(*foundKey, level2+1)
 				oldLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(oldKey, foundOldValHash), utils.LeafCapacity)
-				s.Db.InsertHashKey(oldLeafHash, *foundKey)
+				if err != nil {
+					return nil, err
+				}
+
+				err = s.Db.InsertHashKey(oldLeafHash, *foundKey)
 				if err != nil {
 					return nil, err
 				}
@@ -351,7 +355,10 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 					return nil, err
 				}
 
-				s.Db.InsertHashKey(newLeafHash, k)
+				err = s.Db.InsertHashKey(newLeafHash, k)
+				if err != nil {
+					return nil, err
+				}
 
 				var node [8]uint64
 				for i := 0; i < 8; i++ {
@@ -417,7 +424,10 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 				return nil, err
 			}
 
-			s.Db.InsertHashKey(newLeafHash, k)
+			err = s.Db.InsertHashKey(newLeafHash, k)
+			if err != nil {
+				return nil, err
+			}
 
 			proofHashCounter += 2
 
@@ -472,10 +482,15 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 					oldKey := utils.RemoveKeyBits(*insKey, level+1)
 					oldLeafHash, err := s.hashcalcAndSave(utils.ConcatArrays4(oldKey, *valH), utils.LeafCapacity)
-					s.Db.InsertHashKey(oldLeafHash, *insKey)
 					if err != nil {
 						return nil, err
 					}
+
+					err = s.Db.InsertHashKey(oldLeafHash, *insKey)
+					if err != nil {
+						return nil, err
+					}
+
 					proofHashCounter += 1
 
 					if level >= 0 {
