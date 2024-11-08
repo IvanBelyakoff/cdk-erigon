@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ugorji/go/codec"
 )
@@ -297,46 +298,21 @@ func TestOperatorSMTLeafValue_EncodeDecode(t *testing.T) {
 
 			// Encode
 			err := tt.leaf.WriteTo(marshaller)
-			if err != nil {
-				t.Fatalf("WriteTo failed: %v", err)
-			}
+			require.NoError(t, err)
 
 			// Decode
 			unmarshaller := NewOperatorUnmarshaller(&buf)
 			// Read OpCode first as it would be in real scenario
 			opCode, err := unmarshaller.ReadUInt8()
-			if err != nil {
-				t.Fatalf("ReadOpCode failed: %v", err)
-			}
-			if opCode != uint8(OperatorKindCode(OpSMTLeaf)) {
-				t.Errorf("expected OpSMTLeaf (%d), got %d", OpSMTLeaf, opCode)
-			}
+			require.NoError(t, err)
+			require.Equal(t, uint8(OpSMTLeaf), opCode)
 
 			var decoded OperatorSMTLeafValue
 			err = decoded.LoadFrom(unmarshaller)
-			if err != nil {
-				t.Fatalf("LoadFrom failed: %v", err)
-			}
+			require.NoError(t, err)
 
 			// Compare original and decoded
-			if decoded.NodeType != tt.leaf.NodeType {
-				t.Errorf("NodeType mismatch: got %v, want %v", decoded.NodeType, tt.leaf.NodeType)
-			}
-			if !bytes.Equal(decoded.Address, tt.leaf.Address) {
-				t.Errorf("Address mismatch: got %x, want %x", decoded.Address, tt.leaf.Address)
-			}
-			if !bytes.Equal(decoded.Value, tt.leaf.Value) {
-				t.Errorf("Value mismatch: got %x, want %x", decoded.Value, tt.leaf.Value)
-			}
-			if tt.leaf.NodeType == utils.SC_STORAGE {
-				if !bytes.Equal(decoded.StorageKey, tt.leaf.StorageKey) {
-					t.Errorf("StorageKey mismatch: got %x, want %x", decoded.StorageKey, tt.leaf.StorageKey)
-				}
-			} else {
-				if decoded.StorageKey != nil {
-					t.Errorf("StorageKey should be nil for non-storage leaf")
-				}
-			}
+			require.Equal(t, tt.leaf, decoded)
 		})
 	}
 }
