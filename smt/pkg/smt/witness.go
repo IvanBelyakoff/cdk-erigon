@@ -119,8 +119,8 @@ func BuildWitness(s *SMT, rd trie.RetainDecider, ctx context.Context) (*trie.Wit
 	return trie.NewWitness(operands), err
 }
 
-// BuildSMTfromWitness builds SMT from witness
-func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
+// BuildSMTFromWitness builds SMT from witness
+func BuildSMTFromWitness(w *trie.Witness) (*SMT, error) {
 	// using memdb
 	s := NewSMT(nil, false)
 

@@ -842,5 +842,5 @@ func (s *SMT) Copy(ctx context.Context) (*SMT, error) {
 		return nil, err
 	}
 
-	return BuildSMTfromWitness(witness)
+	return BuildSMTFromWitness(witness)
 }

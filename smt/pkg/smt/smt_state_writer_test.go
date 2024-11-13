@@ -50,7 +50,7 @@ func TestSMTApplyTraces(t *testing.T) {
 			witness, err := trie.NewWitnessFromReader(bytes.NewReader(decodedWitnessRaw), false)
 			require.NoError(t, err)
 
-			smt, err := BuildSMTfromWitness(witness)
+			smt, err := BuildSMTFromWitness(witness)
 			require.NoError(t, err)
 
 			newSMT, err := smt.ApplyTraces(td.Traces)
