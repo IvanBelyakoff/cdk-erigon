@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"time"
 
-	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -50,7 +48,7 @@ type Generator struct {
 	chainCfg        *chain.Config
 	zkConfig        *ethconfig.Zk
 	engine          consensus.EngineReader
-	forcedContracts []libcommon.Address
+	forcedContracts []common.Address
 }
 
 func NewGenerator(
@@ -61,7 +59,7 @@ func NewGenerator(
 	chainCfg *chain.Config,
 	zkConfig *ethconfig.Zk,
 	engine consensus.EngineReader,
-	forcedContracs []libcommon.Address,
+	forcedContracs []common.Address,
 ) *Generator {
 	return &Generator{
 		dirs:            dirs,
@@ -286,18 +284,7 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint
 		prevStateRoot = block.Root()
 	}
 
-	inclusion := make(map[common.Address][]common.Hash)
-	for _, contract := range g.forcedContracts {
-		err = reader.ForEachStorage(contract, common.Hash{}, func(key, secKey common.Hash, value uint256.Int) bool {
-			inclusion[contract] = append(inclusion[contract], key)
-			return false
-		}, math.MaxInt64)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	witness, err := BuildWitnessFromTrieDbState(ctx, rwtx, tds, witnessFull)
+	witness, err := BuildWitnessFromTrieDbState(ctx, rwtx, tds, reader, g.forcedContracts, witnessFull)
 	if err != nil {
 		return nil, fmt.Errorf("BuildWitnessFromTrieDbState: %w", err)
 	}

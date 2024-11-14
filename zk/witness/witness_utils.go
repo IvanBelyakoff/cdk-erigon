@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 
+	"github.com/holiman/uint256"
 	coreState "github.com/ledgerwatch/erigon/core/state"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
@@ -14,6 +16,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/state"
+	corestate "github.com/ledgerwatch/erigon/core/state"
+
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
@@ -106,16 +110,27 @@ func PrepareGersForWitness(block *eritypes.Block, db gerForWitnessDb, tds *coreS
 }
 
 type trieDbState interface {
-	ResolveSMTRetainList() (*trie.RetainList, error)
+	ResolveSMTRetainList(inclusion map[common.Address][]common.Hash) (*trie.RetainList, error)
 }
 
-func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, tds trieDbState, witnessFull bool) (witness *trie.Witness, err error) {
+func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, tds trieDbState, reader *corestate.PlainState, forcedContracts []common.Address, witnessFull bool) (witness *trie.Witness, err error) {
 	var rl trie.RetainDecider
 	// if full is true, we will send all the nodes to the witness
 	rl = &trie.AlwaysTrueRetainDecider{}
 
 	if !witnessFull {
-		rl, err = tds.ResolveSMTRetainList()
+		inclusion := make(map[common.Address][]common.Hash)
+		for _, contract := range forcedContracts {
+			err = reader.ForEachStorage(contract, common.Hash{}, func(key, secKey common.Hash, value uint256.Int) bool {
+				inclusion[contract] = append(inclusion[contract], key)
+				return false
+			}, math.MaxInt64)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		rl, err = tds.ResolveSMTRetainList(inclusion)
 		if err != nil {
 			return nil, err
 		}
@@ -124,8 +139,7 @@ func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, tds trieDbState,
 	eridb := db2.NewRoEriDb(tx)
 	smtTrie := smt.NewRoSMT(eridb)
 
-	witness, err = smt.BuildWitness(smtTrie, rl, ctx)
-	if err != nil {
+	if witness, err = smt.BuildWitness(smtTrie, rl, ctx); err != nil {
 		return nil, fmt.Errorf("BuildWitness: %w", err)
 	}
 
