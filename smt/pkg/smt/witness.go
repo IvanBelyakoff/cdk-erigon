@@ -12,10 +12,10 @@ import (
 )
 
 // BuildWitness creates a witness from the SMT
-func BuildWitness(s *SMT, rd trie.RetainDecider, ctx context.Context) (*trie.Witness, error) {
+func BuildWitness(s *RoSMT, rd trie.RetainDecider, ctx context.Context) (*trie.Witness, error) {
 	operands := make([]trie.WitnessOperator, 0)
 
-	root, err := s.Db.GetLastRoot()
+	root, err := s.DbRo.GetLastRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -55,12 +55,12 @@ func BuildWitness(s *SMT, rd trie.RetainDecider, ctx context.Context) (*trie.Wit
 		}
 
 		if v.IsFinalNode() {
-			actualK, err := s.Db.GetHashKey(k)
+			actualK, err := s.DbRo.GetHashKey(k)
 			if err != nil {
 				return false, err
 			}
 
-			keySource, err := s.Db.GetKeySource(actualK)
+			keySource, err := s.DbRo.GetKeySource(actualK)
 			if err != nil {
 				return false, err
 			}
@@ -71,14 +71,14 @@ func BuildWitness(s *SMT, rd trie.RetainDecider, ctx context.Context) (*trie.Wit
 			}
 
 			valHash := v.Get4to8()
-			v, err := s.Db.Get(*valHash)
+			v, err := s.DbRo.Get(*valHash)
 			if err != nil {
 				return false, err
 			}
 
 			vInBytes := utils.ArrayBigToScalar(utils.BigIntArrayFromNodeValue8(v.GetNodeValue8())).Bytes()
 			if t == utils.SC_CODE {
-				code, err := s.Db.GetCode(vInBytes)
+				code, err := s.DbRo.GetCode(vInBytes)
 				if err != nil {
 					return false, err
 				}

@@ -31,7 +31,7 @@ func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
 
 	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0, state.NewPlainStateReader(tx))
 
-	w := tds.TrieStateWriter()
+	w := tds.NewTrieStateWriter()
 
 	intraBlockState := state.New(tds)
 
@@ -46,7 +46,7 @@ func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
 	intraBlockState.AddBalance(contract, balance)
 	intraBlockState.SetState(contract, &sKey, *sVal)
 
-	err := intraBlockState.FinalizeTx(&chain.Rules{}, tds.TrieStateWriter())
+	err := intraBlockState.FinalizeTx(&chain.Rules{}, tds.NewTrieStateWriter())
 	require.NoError(t, err, "error finalising 1st tx")
 
 	err = intraBlockState.CommitBlock(&chain.Rules{}, w)
