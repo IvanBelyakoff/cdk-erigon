@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
+	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/stretchr/testify/require"
@@ -34,10 +36,13 @@ func TestSMTApplyTraces(t *testing.T) {
 			name: "Empty block full witness",
 			file: "./testdata/zerotraces/full-witness-empty-block.json",
 		},
-		},
 		// {
-		// 	name: "Empty block witness",
-		// 	file: "./testdata/zerotraces/empty-block-trace.json",
+		// 	name: "SC deployment full witness",
+		// 	file: "./testdata/zerotraces/full-witness-contract-deployment.json",
+		// },
+		// {
+		// 	name: "SC interaction full witness",
+		// 	file: "./testdata/zerotraces/full-witness-contract-interaction.json",
 		// },
 	}
 
