@@ -289,6 +289,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.InfoTreeUpdateInterval,
 	&utils.SealBatchImmediatelyOnOverflow,
 	&utils.MockWitnessGeneration,
-	&utils.WitnessCacheEnable,
-	&utils.WitnessCacheLimit,
+	&utils.WitnessContractInclusion,
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"time"
 
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -40,14 +42,15 @@ var (
 )
 
 type Generator struct {
-	tx          kv.Tx
-	dirs        datadir.Dirs
-	historyV3   bool
-	agg         *libstate.Aggregator
-	blockReader services.FullBlockReader
-	chainCfg    *chain.Config
-	zkConfig    *ethconfig.Zk
-	engine      consensus.EngineReader
+	tx              kv.Tx
+	dirs            datadir.Dirs
+	historyV3       bool
+	agg             *libstate.Aggregator
+	blockReader     services.FullBlockReader
+	chainCfg        *chain.Config
+	zkConfig        *ethconfig.Zk
+	engine          consensus.EngineReader
+	forcedContracts []libcommon.Address
 }
 
 func NewGenerator(
@@ -58,15 +61,17 @@ func NewGenerator(
 	chainCfg *chain.Config,
 	zkConfig *ethconfig.Zk,
 	engine consensus.EngineReader,
+	forcedContracs []libcommon.Address,
 ) *Generator {
 	return &Generator{
-		dirs:        dirs,
-		historyV3:   historyV3,
-		agg:         agg,
-		blockReader: blockReader,
-		chainCfg:    chainCfg,
-		zkConfig:    zkConfig,
-		engine:      engine,
+		dirs:            dirs,
+		historyV3:       historyV3,
+		agg:             agg,
+		blockReader:     blockReader,
+		chainCfg:        chainCfg,
+		zkConfig:        zkConfig,
+		engine:          engine,
+		forcedContracts: forcedContracs,
 	}
 }
 
@@ -279,6 +284,17 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint
 		}
 
 		prevStateRoot = block.Root()
+	}
+
+	inclusion := make(map[common.Address][]common.Hash)
+	for _, contract := range g.forcedContracts {
+		err = reader.ForEachStorage(contract, common.Hash{}, func(key, secKey common.Hash, value uint256.Int) bool {
+			inclusion[contract] = append(inclusion[contract], key)
+			return false
+		}, math.MaxInt64)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	witness, err := BuildWitnessFromTrieDbState(ctx, rwtx, tds, witnessFull)

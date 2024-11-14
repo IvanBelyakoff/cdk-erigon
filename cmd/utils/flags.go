@@ -773,6 +773,11 @@ var (
 		Usage: "Amount of blocks behind the last executed one to keep witnesses for. Needs a lot of HDD space. Default value 10 000.",
 		Value: 10000,
 	}
+	WitnessContractInclusion = cli.StringFlag{
+		Name:  "zkevm.witness-contract-inclusion",
+		Usage: "Contracts that will have all of their storage added to the witness every time",
+		Value: "",
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",
