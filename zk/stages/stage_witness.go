@@ -35,26 +35,28 @@ type WitnessDb interface {
 }
 
 type WitnessCfg struct {
-	db          kv.RwDB
-	zkCfg       *ethconfig.Zk
-	chainConfig *chain.Config
-	engine      consensus.Engine
-	blockReader services.FullBlockReader
-	agg         *eristate.Aggregator
-	historyV3   bool
-	dirs        datadir.Dirs
+	db             kv.RwDB
+	zkCfg          *ethconfig.Zk
+	chainConfig    *chain.Config
+	engine         consensus.Engine
+	blockReader    services.FullBlockReader
+	agg            *eristate.Aggregator
+	historyV3      bool
+	dirs           datadir.Dirs
+	forcedContracs []common.Address
 }
 
-func StageWitnessCfg(db kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config, engine consensus.Engine, blockReader services.FullBlockReader, agg *eristate.Aggregator, historyV3 bool, dirs datadir.Dirs) WitnessCfg {
+func StageWitnessCfg(db kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config, engine consensus.Engine, blockReader services.FullBlockReader, agg *eristate.Aggregator, historyV3 bool, dirs datadir.Dirs, forcedContracs []common.Address) WitnessCfg {
 	cfg := WitnessCfg{
-		db:          db,
-		zkCfg:       zkCfg,
-		chainConfig: chainConfig,
-		engine:      engine,
-		blockReader: blockReader,
-		agg:         agg,
-		historyV3:   historyV3,
-		dirs:        dirs,
+		db:             db,
+		zkCfg:          zkCfg,
+		chainConfig:    chainConfig,
+		engine:         engine,
+		blockReader:    blockReader,
+		agg:            agg,
+		historyV3:      historyV3,
+		dirs:           dirs,
+		forcedContracs: forcedContracs,
 	}
 
 	return cfg
@@ -179,7 +181,7 @@ func SpawnStageWitness(
 
 		prevStateRoot = block.Root()
 
-		w, err := witness.BuildWitnessFromTrieDbState(ctx, memTx, tds, true)
+		w, err := witness.BuildWitnessFromTrieDbState(ctx, memTx, tds, reader, cfg.forcedContracs, true)
 		if err != nil {
 			return fmt.Errorf("BuildWitnessFromTrieDbState: %w", err)
 		}
