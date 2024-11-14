@@ -16,9 +16,10 @@ import (
 
 func TestSMTApplyTraces(t *testing.T) {
 	type testData struct {
-		Witness   string                                `json:"witness"`
-		StateRoot libcommon.Hash                        `json:"stateRoot"`
-		Traces    map[libcommon.Address]*types.TxnTrace `json:"traces,omitempty"`
+		IsFullWitness bool                                  `json:"isFullWitness"`
+		Witness       string                                `json:"witness"`
+		StateRoot     libcommon.Hash                        `json:"stateRoot"`
+		Traces        map[libcommon.Address]*types.TxnTrace `json:"traces,omitempty"`
 	}
 
 	cases := []struct {
@@ -26,8 +27,13 @@ func TestSMTApplyTraces(t *testing.T) {
 		file string
 	}{
 		{
-			name: "Full witness block traces",
-			file: "./testdata/zerotraces/full-witness-non-empty-block-trace.json",
+			name: "Single EOA tx full witness",
+			file: "./testdata/zerotraces/full-witness-single-eoa-tx.json",
+		},
+		{
+			name: "Empty block full witness",
+			file: "./testdata/zerotraces/full-witness-empty-block.json",
+		},
 		},
 		// {
 		// 	name: "Empty block witness",
@@ -53,7 +59,19 @@ func TestSMTApplyTraces(t *testing.T) {
 			smt, err := BuildSMTFromWitness(witness)
 			require.NoError(t, err)
 
-			newSMT, err := smt.ApplyTraces(td.Traces)
+			var rd trie.RetainDecider
+			if td.IsFullWitness {
+				rd = &trie.AlwaysTrueRetainDecider{}
+			} else {
+				_, tx := memdb.NewTestTx(t)
+				tds := state.NewTrieDbState(td.StateRoot, tx, 0, state.NewPlainStateReader(tx))
+				tds.StartNewBuffer()
+
+				rd, err = tds.ResolveSMTRetainList()
+				require.NoError(t, err)
+			}
+
+			newSMT, err := smt.ApplyTraces(td.Traces, rd)
 			require.NoError(t, err)
 
 			require.Equal(t, td.StateRoot, libcommon.BigToHash(newSMT.LastRoot()))

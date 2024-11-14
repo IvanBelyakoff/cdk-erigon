@@ -836,8 +836,8 @@ func (s *SMT) insertHashNode(path []int, hash [4]uint64, root utils.NodeKey) (ut
 }
 
 // Copy copies the SMT, by converting it into the witness first and then back to the SMT from witness.
-func (s *SMT) Copy(ctx context.Context) (*SMT, error) {
-	witness, err := BuildWitness(s, &trie.AlwaysTrueRetainDecider{}, ctx)
+func (s *SMT) Copy(ctx context.Context, rd trie.RetainDecider) (*SMT, error) {
+	witness, err := BuildWitness(s, rd, ctx)
 	if err != nil {
 		return nil, err
 	}

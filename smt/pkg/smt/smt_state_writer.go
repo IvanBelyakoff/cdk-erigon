@@ -12,6 +12,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 )
 
 var _ state.StateWriter = (*SMT)(nil)
@@ -49,8 +50,8 @@ func (s *SMT) CreateContract(address common.Address) error {
 }
 
 // ApplyTraces applies a map of traces on the given SMT and returns new instance of SMT, without altering the original one.
-func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace) (*SMT, error) {
-	// result, err := s.Copy(context.Background())
+func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace, rd trie.RetainDecider) (*SMT, error) {
+	// result, err := s.Copy(context.Background(), rd)
 	// if err != nil {
 	// 	return nil, err
 	// }
@@ -93,8 +94,10 @@ func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace) (*SMT, e
 			storageMap[storageKey] = storageSlot.Hex()
 		}
 
-		if _, err := result.SetContractStorage(addrString, storageMap, nil); err != nil {
-			return nil, err
+		if len(storageMap) > 0 {
+			if _, err := result.SetContractStorage(addrString, storageMap, nil); err != nil {
+				return nil, err
+			}
 		}
 
 		// Set account bytecode
