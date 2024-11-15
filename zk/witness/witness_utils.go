@@ -154,3 +154,7 @@ func GetWitnessBytes(witness *trie.Witness, debug bool) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+func ParseWitnessFromBytes(input []byte, trace bool) (*trie.Witness, error) {
+	return trie.NewWitnessFromReader(bytes.NewReader(input), trace)
+}

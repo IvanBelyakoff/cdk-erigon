@@ -270,6 +270,11 @@ func UnwindWitnessStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg WitnessCfg, c
 		defer tx.Rollback()
 	}
 
+	if cfg.zkCfg.WitnessCacheLimit == 0 {
+		log.Info(fmt.Sprintf("[%s] Skipping witness cache stage. Cache not set or limit is set to 0", logPrefix))
+		return nil
+	}
+
 	fromBlock := u.UnwindPoint + 1
 	toBlock := u.CurrentBlockNumber
 	log.Info(fmt.Sprintf("[%s] Unwinding witness cache stage from block number", logPrefix), "fromBlock", fromBlock, "toBlock", toBlock)
