@@ -72,7 +72,7 @@ func TestSMTApplyTraces(t *testing.T) {
 				tds := state.NewTrieDbState(td.StateRoot, tx, 0, state.NewPlainStateReader(tx))
 				tds.StartNewBuffer()
 
-				rd, err = tds.ResolveSMTRetainList()
+				rd, err = tds.ResolveSMTRetainList(nil)
 				require.NoError(t, err)
 			}
 
