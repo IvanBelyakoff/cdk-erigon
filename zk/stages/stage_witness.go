@@ -14,7 +14,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
-	zkSmt "github.com/ledgerwatch/erigon/zk/smt"
 	zkUtils "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/erigon/zk/witness"
 
@@ -230,33 +229,6 @@ func getBlocks(tx kv.Tx, startBlock, endBlock uint64) (blocks []*eritypes.Block,
 	}
 
 	return blocks, nil
-}
-
-func doUnwinds(ctx context.Context, memTx kv.RwTx, cfg WitnessCfg, startBlock, latestBlock uint64) error {
-	unwindState := &stagedsync.UnwindState{UnwindPoint: startBlock - 1}
-	stageState := &stagedsync.StageState{BlockNumber: latestBlock}
-
-	hashStageCfg := stagedsync.StageHashStateCfg(nil, cfg.dirs, cfg.historyV3, cfg.agg)
-	if err := stagedsync.UnwindHashStateStage(unwindState, stageState, memTx, hashStageCfg, ctx, log.New(), true); err != nil {
-		return fmt.Errorf("UnwindHashStateStage: %w", err)
-	}
-
-	var expectedRootHash common.Hash
-	syncHeadHeader, err := rawdb.ReadHeaderByNumber_zkevm(memTx, unwindState.UnwindPoint)
-	if err != nil {
-		return fmt.Errorf("ReadHeaderByNumber for block %d: %v", unwindState.UnwindPoint, err)
-	}
-	if syncHeadHeader == nil {
-		log.Warn("header not found for block number", "block", unwindState.UnwindPoint)
-	} else {
-		expectedRootHash = syncHeadHeader.Root
-	}
-
-	if _, err := zkSmt.UnwindZkSMT(ctx, "api.generateWitness", stageState.BlockNumber, unwindState.UnwindPoint, memTx, true, &expectedRootHash, true, ctx.Done()); err != nil {
-		return fmt.Errorf("UnwindZkSMT: %w", err)
-	}
-
-	return nil
 }
 
 func UnwindWitnessStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg WitnessCfg, ctx context.Context) (err error) {
