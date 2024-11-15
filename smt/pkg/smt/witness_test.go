@@ -112,7 +112,7 @@ func TestSMTWitnessRetainList(t *testing.T) {
 	sKey := libcommon.HexToHash("0x5")
 	sVal := uint256.NewInt(0xdeadbeef)
 
-	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
+	witness, err := smt.BuildWitness(smtTrie.RoSMT, rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
 	foundCode := findNode(t, witness, contract, libcommon.Hash{}, utils.SC_CODE)
@@ -139,7 +139,7 @@ func TestSMTWitnessRetainListEmptyVal(t *testing.T) {
 	_, err := smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(0).ToBig())
 	require.NoError(t, err)
 
-	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
+	witness, err := smt.BuildWitness(smtTrie.RoSMT, rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
 	foundCode := findNode(t, witness, contract, libcommon.Hash{}, utils.SC_CODE)
@@ -160,7 +160,7 @@ func TestSMTWitnessRetainListEmptyVal(t *testing.T) {
 func TestWitnessToSMT(t *testing.T) {
 	smtTrie, rl := prepareSMT(t)
 
-	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
+	witness, err := smt.BuildWitness(smtTrie.RoSMT, rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
 	newSMT, err := smt.BuildSMTfromWitness(witness)
@@ -190,7 +190,7 @@ func TestWitnessToSMTStateReader(t *testing.T) {
 	expectedRoot, err := smtTrie.Db.GetLastRoot()
 	require.NoError(t, err, "error getting last root")
 
-	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
+	witness, err := smt.BuildWitness(smtTrie.RoSMT, rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
 	newSMT, err := smt.BuildSMTfromWitness(witness)
