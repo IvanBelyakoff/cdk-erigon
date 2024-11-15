@@ -801,11 +801,9 @@ func (s *SMT) insertHashNode(path []int, hash [4]uint64, root utils.NodeKey) (ut
 	}
 
 	childIndex := path[0]
-
 	childOldRoot := rootVal[childIndex*4 : childIndex*4+4]
 
 	childNewRoot, err := s.insertHashNode(path[1:], hash, utils.NodeKeyFromBigIntArray(childOldRoot))
-
 	if err != nil {
 		return utils.NodeKey{}, err
 	}
@@ -813,20 +811,15 @@ func (s *SMT) insertHashNode(path []int, hash [4]uint64, root utils.NodeKey) (ut
 	var newIn [8]uint64
 
 	emptyRootVal := utils.NodeValue12{}
+	sibling := utils.BranchCapacity
 
-	if childIndex == 0 {
-		var sibling [4]uint64
-		if rootVal == emptyRootVal {
-			sibling = [4]uint64{0, 0, 0, 0}
-		} else {
+	if childIndex == int(utils.Left) {
+		if rootVal != emptyRootVal {
 			sibling = *rootVal.Get4to8()
 		}
 		newIn = utils.ConcatArrays4(childNewRoot, sibling)
 	} else {
-		var sibling [4]uint64
-		if rootVal == emptyRootVal {
-			sibling = [4]uint64{0, 0, 0, 0}
-		} else {
+		if rootVal != emptyRootVal {
 			sibling = *rootVal.Get0to4()
 		}
 		newIn = utils.ConcatArrays4(sibling, childNewRoot)
