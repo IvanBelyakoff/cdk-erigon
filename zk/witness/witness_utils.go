@@ -3,6 +3,7 @@ package witness
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -25,6 +26,10 @@ import (
 	zkSmt "github.com/ledgerwatch/erigon/zk/smt"
 	zkUtils "github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
+)
+
+var (
+	ErrNoWitnesses = errors.New("witness count is 0")
 )
 
 func UnwindForWitness(ctx context.Context, tx kv.RwTx, startBlock, latestBlock uint64, dirs datadir.Dirs, historyV3 bool, agg *state.Aggregator) (err error) {
@@ -157,4 +162,70 @@ func GetWitnessBytes(witness *trie.Witness, debug bool) ([]byte, error) {
 
 func ParseWitnessFromBytes(input []byte, trace bool) (*trie.Witness, error) {
 	return trie.NewWitnessFromReader(bytes.NewReader(input), trace)
+}
+
+// merges witnesses into one
+// corresponds to a witness built on a range of blocks
+// input witnesses should be ordered by consequent blocks
+// it replaces values from 2,3,4 into the first witness
+// it does this through creating tries from the witnesses, merging the tries and then creating a witness from the rsulting trie
+func MergeWitnesses(witnesses []*trie.Witness) (*trie.Witness, error) {
+	if len(witnesses) == 0 {
+		return nil, ErrNoWitnesses
+	}
+
+	if len(witnesses) == 1 {
+		return witnesses[0], nil
+	}
+
+	baseTrie, err := trie.BuildTrieFromWitness(witnesses[0], false)
+	if err != nil {
+		return nil, err
+	}
+	for i := 1; i < len(witnesses); i++ {
+		trie, err := trie.BuildTrieFromWitness(witnesses[i], false)
+		if err != nil {
+			return nil, err
+		}
+		baseTrie, err = mergeTries(baseTrie, trie)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return baseTrie.ExtractWitness(false, nil)
+}
+
+func mergeTries(trie1, trie2 *trie.Trie) (*trie.Trie, error) {
+	addresses, err := trie2.GetAllAddresses()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, address := range addresses {
+		account, found := trie2.GetAccount(address[:])
+		if !found {
+			return nil, fmt.Errorf("account not found")
+		}
+
+		trie1.UpdateAccount(address[:], account)
+
+		code, found := trie2.GetAccountCode(address)
+		if !found {
+			return nil, fmt.Errorf("code not found")
+		}
+		if err := trie1.UpdateAccountCode(address, code); err != nil {
+			return nil, err
+		}
+
+		codeSize, found := trie2.GetAccountCodeSize(address)
+		if !found {
+			return nil, fmt.Errorf("code size not found")
+		}
+		if err := trie1.UpdateAccountCodeSize(address, codeSize); err != nil {
+			return nil, err
+		}
+	}
+
+	return trie1, nil
 }
