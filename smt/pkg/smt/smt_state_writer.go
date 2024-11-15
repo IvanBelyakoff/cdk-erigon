@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -73,11 +74,20 @@ func (s *SMT) ApplyTraces(traces map[libcommon.Address]*types.TxnTrace, rd trie.
 		}
 
 		addrString := addr.Hex()
-		// Set account balance
+
+		// Set account balance and nonce
+		balanceBig := big.NewInt(0)
 		if trace.Balance != nil {
-			if _, err := result.SetAccountBalance(addrString, trace.Balance.ToBig()); err != nil {
-				return nil, err
-			}
+			balanceBig = trace.Balance.ToBig()
+		}
+
+		nonceBig := big.NewInt(0)
+		if trace.Nonce != nil {
+			nonceBig = trace.Nonce.ToBig()
+		}
+
+		if _, err := result.SetAccountState(addrString, balanceBig, nonceBig); err != nil {
+			return nil, err
 		}
 
 		// Set account nonce
