@@ -16,12 +16,15 @@ import (
 
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 
+	"math"
+
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/systemcontracts"
 	eritypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -32,6 +35,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	smtUtils "github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
@@ -45,8 +49,6 @@ import (
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	"github.com/ledgerwatch/erigon/core/systemcontracts"
-	"math"
 )
 
 var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
@@ -980,7 +982,6 @@ func (api *ZkEvmAPIImpl) GetBlockRangeWitness(ctx context.Context, startBlockNrO
 }
 
 func (api *ZkEvmAPIImpl) getBatchWitness(ctx context.Context, tx kv.Tx, batchNum uint64, debug bool, mode WitnessMode) (hexutility.Bytes, error) {
-
 	// limit in-flight requests by name
 	semaphore := api.semaphores[getBatchWitness]
 	if semaphore != nil {
@@ -995,14 +996,44 @@ func (api *ZkEvmAPIImpl) getBatchWitness(ctx context.Context, tx kv.Tx, batchNum
 	if api.ethApi.historyV3(tx) {
 		return nil, fmt.Errorf("not supported by Erigon3")
 	}
-
-	generator, fullWitness, err := api.buildGenerator(ctx, tx, mode)
+	reader := hermez_db.NewHermezDbReader(tx)
+	badBatch, err := reader.GetInvalidBatch(batchNum)
 	if err != nil {
 		return nil, err
 	}
 
-	return generator.GetWitnessByBatch(tx, ctx, batchNum, debug, fullWitness)
+	if !badBatch {
+		blockNumbers, err := reader.GetL2BlockNosByBatch(batchNum)
+		if err != nil {
+			return nil, err
+		}
+		if len(blockNumbers) == 0 {
+			return nil, fmt.Errorf("no blocks found for batch %d", batchNum)
+		}
+		var startBlock, endBlock uint64
+		for _, blockNumber := range blockNumbers {
+			if startBlock == 0 || blockNumber < startBlock {
+				startBlock = blockNumber
+			}
+			if blockNumber > endBlock {
+				endBlock = blockNumber
+			}
+		}
 
+		startBlockInt := rpc.BlockNumber(startBlock)
+		endBlockInt := rpc.BlockNumber(endBlock)
+
+		startBlockRpc := rpc.BlockNumberOrHash{BlockNumber: &startBlockInt}
+		endBlockNrOrHash := rpc.BlockNumberOrHash{BlockNumber: &endBlockInt}
+		return api.getBlockRangeWitness(ctx, api.db, startBlockRpc, endBlockNrOrHash, debug, mode)
+	} else {
+		generator, fullWitness, err := api.buildGenerator(ctx, tx, mode)
+		if err != nil {
+			return nil, err
+		}
+
+		return generator.GetWitnessByBadBatch(tx, ctx, batchNum, debug, fullWitness)
+	}
 }
 
 func (api *ZkEvmAPIImpl) buildGenerator(ctx context.Context, tx kv.Tx, witnessMode WitnessMode) (*witness.Generator, bool, error) {
@@ -1056,6 +1087,37 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 
 	if blockNr > endBlockNr {
 		return nil, fmt.Errorf("start block number must be less than or equal to end block number, start=%d end=%d", blockNr, endBlockNr)
+	}
+
+	hermezDb := hermez_db.NewHermezDbReader(tx)
+
+	blockWitnesses := make([]*trie.Witness, 0, endBlockNr-blockNr+1)
+	//try to get them from the db, if all are available - do not unwind and generate
+	for blockNum := blockNr; blockNum <= endBlockNr; blockNum++ {
+		witnessBytes, err := hermezDb.GetWitnessCache(blockNum)
+		if err != nil {
+			return nil, err
+		}
+
+		if witnessBytes == nil || len(witnessBytes) == 0 {
+			break
+		}
+
+		blockWitness, err := witness.ParseWitnessFromBytes(witnessBytes, false)
+		if err != nil {
+			return nil, err
+		}
+		blockWitnesses = append(blockWitnesses, blockWitness)
+	}
+
+	if len(blockWitnesses) == int(endBlockNr-blockNr+1) {
+		// found all, calculate
+		baseWitness, err := witness.MergeWitnesses(blockWitnesses)
+		if err != nil {
+			return nil, err
+		}
+
+		return witness.GetWitnessBytes(baseWitness, debug)
 	}
 
 	generator, fullWitness, err := api.buildGenerator(ctx, tx, witnessMode)

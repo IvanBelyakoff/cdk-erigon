@@ -73,80 +73,55 @@ func NewGenerator(
 	}
 }
 
-func (g *Generator) GetWitnessByBatch(tx kv.Tx, ctx context.Context, batchNum uint64, debug, witnessFull bool) (witness []byte, err error) {
-	t := zkUtils.StartTimer("witness", "getwitnessbybatch")
+func (g *Generator) GetWitnessByBadBatch(tx kv.Tx, ctx context.Context, batchNum uint64, debug, witnessFull bool) (witness []byte, err error) {
+	t := zkUtils.StartTimer("witness", "getwitnessbybadbatch")
 	defer t.LogTimer()
 
 	reader := hermez_db.NewHermezDbReader(tx)
-	badBatch, err := reader.GetInvalidBatch(batchNum)
+	// we need the header of the block prior to this batch to build up the blocks
+	previousHeight, _, err := reader.GetHighestBlockInBatch(batchNum - 1)
 	if err != nil {
 		return nil, err
 	}
-	if badBatch {
-		// we need the header of the block prior to this batch to build up the blocks
-		previousHeight, _, err := reader.GetHighestBlockInBatch(batchNum - 1)
-		if err != nil {
-			return nil, err
-		}
-		previousHeader := rawdb.ReadHeaderByNumber(tx, previousHeight)
-		if previousHeader == nil {
-			return nil, fmt.Errorf("failed to get header for block %d", previousHeight)
-		}
-
-		// 1. get l1 batch data for the bad batch
-		fork, err := reader.GetForkId(batchNum)
-		if err != nil {
-			return nil, err
-		}
-
-		decoded, err := l1_data.BreakDownL1DataByBatch(batchNum, fork, reader)
-		if err != nil {
-			return nil, err
-		}
-
-		nextNum := previousHeader.Number.Uint64()
-		parentHash := previousHeader.Hash()
-		timestamp := previousHeader.Time
-		blocks := make([]*eritypes.Block, len(decoded.DecodedData))
-		for i, d := range decoded.DecodedData {
-			timestamp += uint64(d.DeltaTimestamp)
-			nextNum++
-			newHeader := &eritypes.Header{
-				ParentHash: parentHash,
-				Coinbase:   decoded.Coinbase,
-				Difficulty: new(big.Int).SetUint64(0),
-				Number:     new(big.Int).SetUint64(nextNum),
-				GasLimit:   zkUtils.GetBlockGasLimitForFork(fork),
-				Time:       timestamp,
-			}
-
-			parentHash = newHeader.Hash()
-			transactions := d.Transactions
-			block := eritypes.NewBlock(newHeader, transactions, nil, nil, nil)
-			blocks[i] = block
-		}
-
-		return g.generateWitness(tx, ctx, batchNum, blocks, debug, witnessFull)
-	} else {
-		blockNumbers, err := reader.GetL2BlockNosByBatch(batchNum)
-		if err != nil {
-			return nil, err
-		}
-		if len(blockNumbers) == 0 {
-			return nil, fmt.Errorf("no blocks found for batch %d", batchNum)
-		}
-		blocks := make([]*eritypes.Block, len(blockNumbers))
-		idx := 0
-		for _, blockNum := range blockNumbers {
-			block, err := rawdb.ReadBlockByNumber(tx, blockNum)
-			if err != nil {
-				return nil, err
-			}
-			blocks[idx] = block
-			idx++
-		}
-		return g.generateWitness(tx, ctx, batchNum, blocks, debug, witnessFull)
+	previousHeader := rawdb.ReadHeaderByNumber(tx, previousHeight)
+	if previousHeader == nil {
+		return nil, fmt.Errorf("failed to get header for block %d", previousHeight)
 	}
+
+	// 1. get l1 batch data for the bad batch
+	fork, err := reader.GetForkId(batchNum)
+	if err != nil {
+		return nil, err
+	}
+
+	decoded, err := l1_data.BreakDownL1DataByBatch(batchNum, fork, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	nextNum := previousHeader.Number.Uint64()
+	parentHash := previousHeader.Hash()
+	timestamp := previousHeader.Time
+	blocks := make([]*eritypes.Block, len(decoded.DecodedData))
+	for i, d := range decoded.DecodedData {
+		timestamp += uint64(d.DeltaTimestamp)
+		nextNum++
+		newHeader := &eritypes.Header{
+			ParentHash: parentHash,
+			Coinbase:   decoded.Coinbase,
+			Difficulty: new(big.Int).SetUint64(0),
+			Number:     new(big.Int).SetUint64(nextNum),
+			GasLimit:   zkUtils.GetBlockGasLimitForFork(fork),
+			Time:       timestamp,
+		}
+
+		parentHash = newHeader.Hash()
+		transactions := d.Transactions
+		block := eritypes.NewBlock(newHeader, transactions, nil, nil, nil)
+		blocks[i] = block
+	}
+
+	return g.generateWitness(tx, ctx, batchNum, blocks, debug, witnessFull)
 }
 
 func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error) {
@@ -161,6 +136,7 @@ func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startB
 		return GetWitnessBytes(witness, debug)
 	}
 	hermezDb := hermez_db.NewHermezDbReader(tx)
+
 	idx := 0
 	blocks := make([]*eritypes.Block, endBlock-startBlock+1)
 	var firstBatch uint64 = 0
