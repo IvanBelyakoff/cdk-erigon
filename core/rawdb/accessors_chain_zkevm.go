@@ -273,8 +273,9 @@ func ReadHeader_zkevm(db kv.Getter, hash common.Hash, number uint64) (header *ty
 		return nil, nil
 	}
 
+	header = new(types.Header)
 	if err := rlp.Decode(bytes.NewReader(data), header); err != nil {
-		return nil, fmt.Errorf("Invalid block header RLP hash: %v, err: %w", hash, err)
+		return nil, fmt.Errorf("invalid block header RLP hash: %v, err: %w", hash, err)
 	}
 	return header, nil
 }

@@ -24,7 +24,7 @@ import (
 	"github.com/status-im/keycard-go/hexutils"
 )
 
-func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quiet bool, quit <-chan struct{}) (common.Hash, error) {
+func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quiet bool) (common.Hash, error) {
 	if !quiet {
 		log.Info(fmt.Sprintf("[%s] Unwind trie hashes started", logPrefix))
 		defer log.Info(fmt.Sprintf("[%s] Unwind ended", logPrefix))
@@ -37,14 +37,9 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 		log.Info(fmt.Sprintf("[%s]", logPrefix), "last root", common.BigToHash(dbSmt.LastRoot()))
 	}
 
-	if quit == nil {
-		log.Warn("quit channel is nil, creating a new one")
-		quit = make(chan struct{})
-	}
-
 	// only open the batch if tx is not already one
 	if _, ok := tx.(*membatchwithdb.MemoryMutation); !ok {
-		eridb.OpenBatch(quit)
+		eridb.OpenBatch(ctx.Done())
 	}
 
 	ac, err := tx.CursorDupSort(kv.AccountChangeSet)
@@ -207,7 +202,7 @@ func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *common.Hash, checkRoot boo
 	hash := common.BigToHash(dbSmt.LastRoot())
 
 	if checkRoot && hash != *expectedRootHash {
-		panic(fmt.Sprintf("[%s] Wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash))
+		return fmt.Errorf("wrong trie root: %x, expected (from header): %x", hash, expectedRootHash)
 	}
 	if !quiet {
 		log.Info(fmt.Sprintf("[%s] Trie root matches", logPrefix), "hash", hash.Hex())

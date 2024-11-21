@@ -133,10 +133,11 @@ func SpawnStageWitness(
 	}
 	memHermezDb := hermez_db.NewHermezDbReader(memTx)
 
+	log.Info(fmt.Sprintf("[%s] Unwinding tree and hashess for witness generation", logPrefix), "from", unwindPoint, "to", stageInterhashesProgressBlockNo)
 	if err := witness.UnwindForWitness(ctx, memTx, unwindPoint, stageInterhashesProgressBlockNo, cfg.dirs, cfg.historyV3, cfg.agg); err != nil {
 		return fmt.Errorf("UnwindForWitness: %w", err)
 	}
-
+	log.Info(fmt.Sprintf("[%s] Unwind done", logPrefix))
 	startBlock := blocks[0].NumberU64()
 
 	prevHeader, err := cfg.blockReader.HeaderByNumber(ctx, tx, startBlock-1)
@@ -156,6 +157,7 @@ func SpawnStageWitness(
 	defer reader.Close()
 	prevStateRoot := prevHeader.Root
 
+	log.Info(fmt.Sprintf("[%s] Executing blocks and collecting witnesses", logPrefix), "from", startBlock, "to", stageInterhashesProgressBlockNo)
 	hermezDb := hermez_db.NewHermezDb(tx)
 	for _, block := range blocks {
 		reader.SetBlockNr(block.NumberU64())
@@ -194,6 +196,7 @@ func SpawnStageWitness(
 			return fmt.Errorf("WriteWitnessCache: %w", err)
 		}
 	}
+	log.Info(fmt.Sprintf("[%s] Witnesses collected", logPrefix))
 
 	// delete cache for blocks lower than the limit
 	log.Info(fmt.Sprintf("[%s] Deleting old witness caches", logPrefix))
