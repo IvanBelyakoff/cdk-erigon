@@ -78,3 +78,14 @@ func TestBlockWitnessAccount(t *testing.T) {
 		t.Errorf("received account is not equal to the initial one")
 	}
 }
+
+func TestBlockWitnessLarge(t *testing.T) {
+	w, err := NewWitnessFromReader(bytes.NewReader(witnessBytes), false /* trace */)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if _, err := BuildTrieFromWitness(w, false); err != nil {
+		t.Errorf("Could not restore trie from the block witness: %v", err)
+	}
+}

@@ -118,6 +118,8 @@ func NewWitnessFromReader(input io.Reader, trace bool) (*Witness, error) {
 			op = &OperatorCode{}
 		case OpBranch:
 			op = &OperatorBranch{}
+		case OpSMTLeaf:
+			op = &OperatorSMTLeafValue{}
 		case OpEmptyRoot:
 			op = &OperatorEmptyRoot{}
 		case OpExtension:

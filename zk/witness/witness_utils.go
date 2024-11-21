@@ -46,6 +46,7 @@ func UnwindForWitness(ctx context.Context, tx kv.RwTx, startBlock, latestBlock u
 	if err != nil {
 		return fmt.Errorf("ReadHeaderByNumber_zkevm for block %d: %v", unwindState.UnwindPoint, err)
 	}
+
 	if syncHeadHeader == nil {
 		log.Warn("header not found for block number", "block", unwindState.UnwindPoint)
 	} else {
@@ -153,8 +154,7 @@ func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, tds trieDbState,
 
 func GetWitnessBytes(witness *trie.Witness, debug bool) ([]byte, error) {
 	var buf bytes.Buffer
-	_, err := witness.WriteInto(&buf, debug)
-	if err != nil {
+	if _, err := witness.WriteInto(&buf, debug); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

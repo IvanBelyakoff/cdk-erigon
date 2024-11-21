@@ -1070,7 +1070,6 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 	}
 
 	endBlockNr, _, _, err := rpchelper.GetCanonicalBlockNumber_zkevm(endBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
-
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -75,12 +76,10 @@ func SpawnStageWitness(
 	cfg WitnessCfg,
 ) error {
 	logPrefix := s.LogPrefix()
-
 	if cfg.zkCfg.WitnessCacheLimit == 0 {
 		log.Info(fmt.Sprintf("[%s] Skipping witness cache stage. Cache not set or limit is set to 0", logPrefix))
 		return nil
 	}
-
 	log.Info(fmt.Sprintf("[%s] Starting witness cache stage", logPrefix))
 	if sequencer.IsSequencer() {
 		log.Info(fmt.Sprintf("[%s] skipping -- sequencer", logPrefix))
@@ -100,7 +99,7 @@ func SpawnStageWitness(
 		defer tx.Rollback()
 	}
 
-	stageProgressBlockNo, err := stages.GetStageProgress(tx, stages.Witness)
+	stageWitnessProgressBlockNo, err := stages.GetStageProgress(tx, stages.Witness)
 	if err != nil {
 		return fmt.Errorf("GetStageProgress: %w", err)
 	}
@@ -110,16 +109,18 @@ func SpawnStageWitness(
 		return fmt.Errorf("GetStageProgress: %w", err)
 	}
 
-	if stageInterhashesProgressBlockNo <= stageProgressBlockNo {
+	if stageInterhashesProgressBlockNo <= stageWitnessProgressBlockNo {
 		log.Info(fmt.Sprintf("[%s] Skipping stage, no new blocks", logPrefix))
 		return nil
 	}
 
-	unwindPoint := stageProgressBlockNo
+	unwindPoint := stageWitnessProgressBlockNo
 	if stageInterhashesProgressBlockNo-cfg.zkCfg.WitnessCacheLimit > unwindPoint {
 		unwindPoint = stageInterhashesProgressBlockNo - cfg.zkCfg.WitnessCacheLimit
 	}
 
+	//get unwind point to be end of previous batch
+	hermezDb := hermez_db.NewHermezDb(tx)
 	blocks, err := getBlocks(tx, unwindPoint, stageInterhashesProgressBlockNo)
 	if err != nil {
 		return fmt.Errorf("getBlocks: %w", err)
@@ -158,7 +159,8 @@ func SpawnStageWitness(
 	prevStateRoot := prevHeader.Root
 
 	log.Info(fmt.Sprintf("[%s] Executing blocks and collecting witnesses", logPrefix), "from", startBlock, "to", stageInterhashesProgressBlockNo)
-	hermezDb := hermez_db.NewHermezDb(tx)
+
+	now := time.Now()
 	for _, block := range blocks {
 		reader.SetBlockNr(block.NumberU64())
 		tds := state.NewTrieDbState(prevHeader.Root, tx, startBlock-1, nil)
@@ -182,7 +184,7 @@ func SpawnStageWitness(
 
 		prevStateRoot = block.Root()
 
-		w, err := witness.BuildWitnessFromTrieDbState(ctx, memTx, tds, reader, cfg.forcedContracs, true)
+		w, err := witness.BuildWitnessFromTrieDbState(ctx, memTx, tds, reader, cfg.forcedContracs, false)
 		if err != nil {
 			return fmt.Errorf("BuildWitnessFromTrieDbState: %w", err)
 		}
@@ -194,6 +196,10 @@ func SpawnStageWitness(
 
 		if hermezDb.WriteWitnessCache(block.NumberU64(), bytes); err != nil {
 			return fmt.Errorf("WriteWitnessCache: %w", err)
+		}
+		if time.Since(now) > 5*time.Second {
+			log.Info(fmt.Sprintf("[%s] Executing blocks and collecting witnesses", logPrefix), "block", block.NumberU64())
+			now = time.Now()
 		}
 	}
 	log.Info(fmt.Sprintf("[%s] Witnesses collected", logPrefix))
