@@ -905,7 +905,7 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, tx kv.Tx, db *herm
 
 			limitTs := batchBlocks[len(batchBlocks)-1].Time()
 
-			inputs := zkUtils.AccHashInputs{
+			inputs := utils.AccHashInputs{
 				OldAccInputHash:      prevSequenceAccInputHash,
 				Sequencer:            coinbase,
 				BatchData:            batchL2Data,
@@ -918,7 +918,7 @@ func (api *ZkEvmAPIImpl) getAccInputHash(ctx context.Context, tx kv.Tx, db *herm
 				IsValidium:           len(api.config.Zk.DAUrl) > 0,
 			}
 
-			accInputHash, err = zkUtils.CalculateAccInputHashByForkId(inputs, currentForkId)
+			accInputHash, err = utils.CalculateAccInputHashByForkId(inputs, currentForkId)
 			if err != nil {
 				return nil, fmt.Errorf("failed to calculate accInputHash for batch %d: %w", i, err)
 			}
@@ -2045,7 +2045,7 @@ func (api *ZkEvmAPIImpl) GetRollupManagerAddress(ctx context.Context) (res json.
 	return rollupManagerAddressJson, err
 }
 
-func (api *ZkEvmAPIImpl) getInjectedBatchAccInputHashFromSequencer(rpcUrl string) (*libcommon.Hash, error) {
+func (api *ZkEvmAPIImpl) getInjectedBatchAccInputHashFromSequencer(rpcUrl string) (*common.Hash, error) {
 	res, err := client.JSONRPCCall(rpcUrl, "zkevm_getBatchByNumber", 1)
 	if err != nil {
 		return nil, err
@@ -2072,7 +2072,7 @@ func (api *ZkEvmAPIImpl) getInjectedBatchAccInputHashFromSequencer(rpcUrl string
 		return nil, fmt.Errorf("accInputHash is not a string")
 	}
 
-	decoded := libcommon.HexToHash(hash)
+	decoded := common.HexToHash(hash)
 
 	return &decoded, nil
 }
