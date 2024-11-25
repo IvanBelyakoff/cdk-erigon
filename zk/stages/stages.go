@@ -357,21 +357,6 @@ func DefaultZkStages(
 			},
 		},
 		{
-			ID:          stages2.Witness,
-			Description: "Generate witness caches for each block",
-			Disabled:    false,
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				return SpawnStageWitness(s, u, ctx, txc.Tx, stageWitnessCfg)
-			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				return UnwindWitnessStage(u, txc.Tx, stageWitnessCfg, ctx)
-			},
-			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
-				return PruneWitnessStage(p, tx, stageWitnessCfg, ctx)
-			},
-		},
-
-		{
 			ID:                  stages2.CallTraces,
 			Description:         "Generate call traces index",
 			DisabledDescription: "Work In Progress",
@@ -453,6 +438,20 @@ func DefaultZkStages(
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
 				return nil
+			},
+		},
+		{
+			ID:          stages2.Witness,
+			Description: "Generate witness caches for each block",
+			Disabled:    false,
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
+				return SpawnStageWitness(s, u, ctx, txc.Tx, stageWitnessCfg)
+			},
+			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
+				return UnwindWitnessStage(u, txc.Tx, stageWitnessCfg, ctx)
+			},
+			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
+				return PruneWitnessStage(p, tx, stageWitnessCfg, ctx)
 			},
 		},
 		{

@@ -1101,7 +1101,7 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 
 	if len(blockWitnesses) == int(endBlockNr-blockNr+1) {
 		// found all, calculate
-		baseWitness, err := witness.MergeWitnesses(blockWitnesses)
+		baseWitness, err := witness.MergeWitnesses(ctx, blockWitnesses)
 		if err != nil {
 			return nil, err
 		}

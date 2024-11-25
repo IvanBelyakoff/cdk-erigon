@@ -169,7 +169,7 @@ func ParseWitnessFromBytes(input []byte, trace bool) (*trie.Witness, error) {
 // input witnesses should be ordered by consequent blocks
 // it replaces values from 2,3,4 into the first witness
 // it does this through creating tries from the witnesses, merging the tries and then creating a witness from the rsulting trie
-func MergeWitnesses(witnesses []*trie.Witness) (*trie.Witness, error) {
+func MergeWitnesses(ctx context.Context, witnesses []*trie.Witness) (*trie.Witness, error) {
 	if len(witnesses) == 0 {
 		return nil, ErrNoWitnesses
 	}
@@ -178,54 +178,44 @@ func MergeWitnesses(witnesses []*trie.Witness) (*trie.Witness, error) {
 		return witnesses[0], nil
 	}
 
-	baseTrie, err := trie.BuildTrieFromWitness(witnesses[0], false)
+	baseSmt, err := smt.BuildSMTfromWitness(witnesses[0])
 	if err != nil {
 		return nil, err
 	}
 	for i := 1; i < len(witnesses); i++ {
-		trie, err := trie.BuildTrieFromWitness(witnesses[i], false)
+		addressDataMap, err := smt.GetAddressValues(witnesses[i])
 		if err != nil {
 			return nil, err
 		}
-		baseTrie, err = mergeTries(baseTrie, trie)
-		if err != nil {
-			return nil, err
+
+		for address, data := range addressDataMap {
+			if data.Balance != nil {
+				if _, err := baseSmt.SetAccountBalance(address.String(), data.Balance); err != nil {
+					return nil, err
+				}
+			}
+			if data.Nonce != nil {
+				if _, err := baseSmt.SetAccountNonce(address.String(), data.Nonce); err != nil {
+					return nil, err
+				}
+			}
+
+			if data.Storage != nil {
+				if _, err := baseSmt.SetContractStorage(address.String(), data.Storage, nil); err != nil {
+					return nil, err
+				}
+			}
+
+			if len(data.Code) != 0 {
+				if err := baseSmt.SetContractBytecode(address.String(), data.Code); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 
-	return baseTrie.ExtractWitness(false, nil)
-}
+	// if full is true, we will send all the nodes to the witness
+	rl := &trie.AlwaysTrueRetainDecider{}
 
-func mergeTries(trie1, trie2 *trie.Trie) (*trie.Trie, error) {
-	addresses, err := trie2.GetAllAddresses()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, address := range addresses {
-		account, found := trie2.GetAccount(address[:])
-		if !found {
-			return nil, fmt.Errorf("account not found")
-		}
-
-		trie1.UpdateAccount(address[:], account)
-
-		code, found := trie2.GetAccountCode(address)
-		if !found {
-			return nil, fmt.Errorf("code not found")
-		}
-		if err := trie1.UpdateAccountCode(address, code); err != nil {
-			return nil, err
-		}
-
-		codeSize, found := trie2.GetAccountCodeSize(address)
-		if !found {
-			return nil, fmt.Errorf("code size not found")
-		}
-		if err := trie1.UpdateAccountCodeSize(address, codeSize); err != nil {
-			return nil, err
-		}
-	}
-
-	return trie1, nil
+	return smt.BuildWitness(baseSmt.RoSMT, rl, ctx)
 }

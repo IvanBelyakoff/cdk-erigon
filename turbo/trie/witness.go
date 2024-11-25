@@ -183,24 +183,21 @@ func (w *Witness) WriteDiff(w2 *Witness, output io.Writer) {
 			o2, ok := w2.Operators[i].(*OperatorBranch)
 			if !ok {
 				fmt.Fprintf(output, "o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)
-			}
-			if o1.Mask != o2.Mask {
+			} else if o1.Mask != o2.Mask {
 				fmt.Fprintf(output, "o1[%d].Mask = %v; o2[%d].Mask = %v", i, o1.Mask, i, o2.Mask)
 			}
 		case *OperatorHash:
 			o2, ok := w2.Operators[i].(*OperatorHash)
 			if !ok {
 				fmt.Fprintf(output, "o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)
-			}
-			if !bytes.Equal(o1.Hash.Bytes(), o2.Hash.Bytes()) {
+			} else if !bytes.Equal(o1.Hash.Bytes(), o2.Hash.Bytes()) {
 				fmt.Fprintf(output, "o1[%d].Hash = %s; o2[%d].Hash = %s\n", i, o1.Hash.Hex(), i, o2.Hash.Hex())
 			}
 		case *OperatorCode:
 			o2, ok := w2.Operators[i].(*OperatorCode)
 			if !ok {
 				fmt.Fprintf(output, "o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)
-			}
-			if !bytes.Equal(o1.Code, o2.Code) {
+			} else if !bytes.Equal(o1.Code, o2.Code) {
 				fmt.Fprintf(output, "o1[%d].Code = %x; o2[%d].Code = %x\n", i, o1.Code, i, o2.Code)
 			}
 		case *OperatorEmptyRoot:
@@ -212,40 +209,41 @@ func (w *Witness) WriteDiff(w2 *Witness, output io.Writer) {
 			o2, ok := w2.Operators[i].(*OperatorExtension)
 			if !ok {
 				fmt.Fprintf(output, "o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)
-			}
-			if !bytes.Equal(o1.Key, o2.Key) {
+			} else if !bytes.Equal(o1.Key, o2.Key) {
 				fmt.Fprintf(output, "extension o1[%d].Key = %x; o2[%d].Key = %x\n", i, o1.Key, i, o2.Key)
 			}
 		case *OperatorLeafAccount:
 			o2, ok := w2.Operators[i].(*OperatorLeafAccount)
 			if !ok {
 				fmt.Fprintf(output, "o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)
-			}
-			if !bytes.Equal(o1.Key, o2.Key) {
-				fmt.Fprintf(output, "leafAcc o1[%d].Key = %x; o2[%d].Key = %x\n", i, o1.Key, i, o2.Key)
-			}
-			if o1.Nonce != o2.Nonce {
-				fmt.Fprintf(output, "leafAcc o1[%d].Nonce = %v; o2[%d].Nonce = %v\n", i, o1.Nonce, i, o2.Nonce)
-			}
-			if o1.Balance.String() != o2.Balance.String() {
-				fmt.Fprintf(output, "leafAcc o1[%d].Balance = %v; o2[%d].Balance = %v\n", i, o1.Balance.String(), i, o2.Balance.String())
-			}
-			if o1.HasCode != o2.HasCode {
-				fmt.Fprintf(output, "leafAcc o1[%d].HasCode = %v; o2[%d].HasCode = %v\n", i, o1.HasCode, i, o2.HasCode)
-			}
-			if o1.HasStorage != o2.HasStorage {
-				fmt.Fprintf(output, "leafAcc o1[%d].HasStorage = %v; o2[%d].HasStorage = %v\n", i, o1.HasStorage, i, o2.HasStorage)
+			} else {
+				if !bytes.Equal(o1.Key, o2.Key) {
+					fmt.Fprintf(output, "leafAcc o1[%d].Key = %x; o2[%d].Key = %x\n", i, o1.Key, i, o2.Key)
+				}
+				if o1.Nonce != o2.Nonce {
+					fmt.Fprintf(output, "leafAcc o1[%d].Nonce = %v; o2[%d].Nonce = %v\n", i, o1.Nonce, i, o2.Nonce)
+				}
+				if o1.Balance.String() != o2.Balance.String() {
+					fmt.Fprintf(output, "leafAcc o1[%d].Balance = %v; o2[%d].Balance = %v\n", i, o1.Balance.String(), i, o2.Balance.String())
+				}
+				if o1.HasCode != o2.HasCode {
+					fmt.Fprintf(output, "leafAcc o1[%d].HasCode = %v; o2[%d].HasCode = %v\n", i, o1.HasCode, i, o2.HasCode)
+				}
+				if o1.HasStorage != o2.HasStorage {
+					fmt.Fprintf(output, "leafAcc o1[%d].HasStorage = %v; o2[%d].HasStorage = %v\n", i, o1.HasStorage, i, o2.HasStorage)
+				}
 			}
 		case *OperatorLeafValue:
 			o2, ok := w2.Operators[i].(*OperatorLeafValue)
 			if !ok {
 				fmt.Fprintf(output, "o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)
-			}
-			if !bytes.Equal(o1.Key, o2.Key) {
-				fmt.Fprintf(output, "leafVal o1[%d].Key = %x; o2[%d].Key = %x\n", i, o1.Key, i, o2.Key)
-			}
-			if !bytes.Equal(o1.Value, o2.Value) {
-				fmt.Fprintf(output, "leafVal o1[%d].Value = %x; o2[%d].Value = %x\n", i, o1.Value, i, o2.Value)
+			} else {
+				if !bytes.Equal(o1.Key, o2.Key) {
+					fmt.Fprintf(output, "leafVal o1[%d].Key = %x; o2[%d].Key = %x\n", i, o1.Key, i, o2.Key)
+				}
+				if !bytes.Equal(o1.Value, o2.Value) {
+					fmt.Fprintf(output, "leafVal o1[%d].Value = %x; o2[%d].Value = %x\n", i, o1.Value, i, o2.Value)
+				}
 			}
 		default:
 			o2 := w2.Operators[i]

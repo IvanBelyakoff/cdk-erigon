@@ -239,3 +239,14 @@ func TestWitnessToSMTStateReader(t *testing.T) {
 	// assert that the storage value is the same
 	require.Equal(t, expectedStorageValue, newStorageValue)
 }
+
+func TestBlockWitnessLarge(t *testing.T) {
+	w, err := trie.NewWitnessFromReader(bytes.NewReader(smt.WitnessBytes), false /* trace */)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if _, err := smt.BuildSMTfromWitness(w); err != nil {
+		t.Errorf("Could not restore trie from the block witness: %v", err)
+	}
+}

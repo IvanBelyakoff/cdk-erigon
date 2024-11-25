@@ -2,65 +2,89 @@ package witness
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"fmt"
 	"math/big"
 	"math/rand"
 	"testing"
 
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMergeWitnesses(t *testing.T) {
-	trie1 := trie.New(common.Hash{})
-	trie2 := trie.New(common.Hash{})
-	trieFull := trie.New(common.Hash{})
+	smt1 := smt.NewSMT(nil, false)
+	smt2 := smt.NewSMT(nil, false)
+	smtFull := smt.NewSMT(nil, false)
 
 	random := rand.New(rand.NewSource(0))
 
-	numberOfAccounts := 2000
+	numberOfAccounts := 10000
+	addresses := make(map[string]smt.AddressData, numberOfAccounts)
 
-	addresses := make([][]byte, numberOfAccounts)
 	for i := 0; i < len(addresses); i++ {
 		a := getAddressForIndex(i)
-		addresses[i] = crypto.Keccak256(a[:])
-	}
-	codeValues := make([][]byte, len(addresses))
-	for i := 0; i < len(addresses); i++ {
-		codeValues[i] = genRandomByteArrayOfLen(128)
-		codeHash := common.BytesToHash(crypto.Keccak256(codeValues[i]))
+		addressBytes := crypto.Keccak256(a[:])
+		address := common.BytesToAddress(addressBytes).String()
 		balance := new(big.Int).Rand(random, new(big.Int).Exp(common.Big2, common.Big256, nil))
-		acc := accounts.NewAccount()
-		acc.Nonce = uint64(random.Int63())
-		acc.Balance.SetFromBig(balance)
-		acc.Root = trie.EmptyRoot
-		acc.CodeHash = codeHash
+		nonce := new(big.Int).Rand(random, new(big.Int).Exp(common.Big2, common.Big256, nil))
+
+		addresses[address] = smt.AddressData{
+			Balance: balance,
+			Nonce:   nonce,
+		}
+		var smtPart *smt.SMT
 
 		if i&1 == 0 {
-			trie1.UpdateAccount(addresses[i][:], &acc)
-			err := trie1.UpdateAccountCode(addresses[i][:], codeValues[i])
-			assert.Nil(t, err, "should successfully insert code")
+			smtPart = smt1
 		} else {
-			trie2.UpdateAccount(addresses[i][:], &acc)
-			err := trie2.UpdateAccountCode(addresses[i][:], codeValues[i])
-			assert.Nil(t, err, "should successfully insert code")
+			smtPart = smt2
 		}
-		trieFull.UpdateAccount(addresses[i][:], &acc)
-		err := trieFull.UpdateAccountCode(addresses[i][:], codeValues[i])
-		assert.Nil(t, err, "should successfully insert code")
+
+		if _, err := smtPart.SetAccountBalance(address, balance); err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := smtPart.SetAccountNonce(address, nonce); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if _, err := smtFull.SetAccountBalance(address, balance); err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := smtFull.SetAccountNonce(address, nonce); err != nil {
+			t.Error(err)
+			return
+		}
 	}
 
-	witness1, err := trie1.ExtractWitness(false, nil)
-	assert.Nil(t, err, "should successfully extract witness")
-	witness2, err := trie2.ExtractWitness(false, nil)
-	assert.Nil(t, err, "should successfully extract witness")
-	witnessFull, err := trieFull.ExtractWitness(false, nil)
-	assert.Nil(t, err, "should successfully extract witness")
+	rl1 := &trie.AlwaysTrueRetainDecider{}
+	rl2 := &trie.AlwaysTrueRetainDecider{}
+	rlFull := &trie.AlwaysTrueRetainDecider{}
+	witness1, err := smt.BuildWitness(smt1.RoSMT, rl1, context.Background())
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
-	mergedWitness, err := MergeWitnesses([]*trie.Witness{witness1, witness2})
+	witness2, err := smt.BuildWitness(smt2.RoSMT, rl2, context.Background())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	witnessFull, err := smt.BuildWitness(smtFull.RoSMT, rlFull, context.Background())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	mergedWitness, err := MergeWitnesses(context.Background(), []*trie.Witness{witness1, witness2})
 	assert.Nil(t, err, "should successfully merge witnesses")
 
 	//create writer
@@ -68,6 +92,9 @@ func TestMergeWitnesses(t *testing.T) {
 	mergedWitness.WriteDiff(witnessFull, &buff)
 	diff := buff.String()
 	assert.Equal(t, 0, len(diff), "witnesses should be equal")
+	if len(diff) > 0 {
+		fmt.Println(diff)
+	}
 }
 
 func getAddressForIndex(index int) [20]byte {

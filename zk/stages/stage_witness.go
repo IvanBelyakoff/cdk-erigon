@@ -197,7 +197,7 @@ func SpawnStageWitness(
 		if hermezDb.WriteWitnessCache(block.NumberU64(), bytes); err != nil {
 			return fmt.Errorf("WriteWitnessCache: %w", err)
 		}
-		if time.Since(now) > 5*time.Second {
+		if time.Since(now) > 10*time.Second {
 			log.Info(fmt.Sprintf("[%s] Executing blocks and collecting witnesses", logPrefix), "block", block.NumberU64())
 			now = time.Now()
 		}
