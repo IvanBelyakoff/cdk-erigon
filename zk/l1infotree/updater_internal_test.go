@@ -37,17 +37,33 @@ func GetDbTx() (tx kv.RwTx, cleanup func()) {
 }
 
 func TestUpdater_chunkLogs(t *testing.T) {
-
 	logs := []types.Log{
 		{
 			Address: common.Address{},
-			Topics:  []common.Hash{},
-			Data:    []byte{},
+			Topics:  []common.Hash{common.HexToHash("0x01")},
+			Data:    []byte{0x01},
+		},
+		{
+			Address: common.Address{},
+			Topics:  []common.Hash{common.HexToHash("0x02")},
+			Data:    []byte{0x02},
+		},
+		{
+			Address: common.Address{},
+			Topics:  []common.Hash{common.HexToHash("0x03")},
+			Data:    []byte{0x03},
+		},
+		{
+			Address: common.Address{},
+			Topics:  []common.Hash{common.HexToHash("0x04")},
+			Data:    []byte{0x04},
 		},
 	}
 
-	chunkedLogs := chunkLogs(logs, 1)
-	assert.Len(t, chunkedLogs, 1)
+	chunkedLogs := chunkLogs(logs, 2)
+	assert.Len(t, chunkedLogs, 2)
+	assert.Len(t, chunkedLogs[0], 2)
+	assert.Len(t, chunkedLogs[1], 2)
 }
 
 func TestUpdater_initialiseL1InfoTree(t *testing.T) {
