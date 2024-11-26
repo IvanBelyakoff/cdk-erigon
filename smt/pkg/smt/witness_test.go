@@ -17,6 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/stretchr/testify/require"
+	"gotest.tools/v3/assert"
 )
 
 func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
@@ -163,7 +164,7 @@ func TestWitnessToSMT(t *testing.T) {
 	witness, err := smtTrie.BuildWitness(rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
-	newSMT, err := smt.BuildSMTfromWitness(witness)
+	newSMT, err := smt.BuildSMTFromWitness(witness)
 	require.NoError(t, err, "error building SMT from witness")
 
 	root, err := newSMT.Db.GetLastRoot()
@@ -193,7 +194,7 @@ func TestWitnessToSMTStateReader(t *testing.T) {
 	witness, err := smtTrie.BuildWitness(rl, context.Background())
 	require.NoError(t, err, "error building witness")
 
-	newSMT, err := smt.BuildSMTfromWitness(witness)
+	newSMT, err := smt.BuildSMTFromWitness(witness)
 	require.NoError(t, err, "error building SMT from witness")
 
 	_, err = newSMT.BuildWitness(rl, context.Background())
@@ -244,15 +245,27 @@ func TestWitnessToSMTStateReader(t *testing.T) {
 }
 
 func TestBlockWitnessLarge(t *testing.T) {
-	w, err := trie.NewWitnessFromReader(bytes.NewReader(smt.WitnessBytes), false /* trace */)
+	witnessBytes, err := hex.DecodeString(smt.Witness1)
+	require.NoError(t, err, "error decoding witness")
+
+	w, err := trie.NewWitnessFromReader(bytes.NewReader(witnessBytes), false /* trace */)
 	if err != nil {
 		t.Error(err)
 	}
 
-	smt1, err := smt.BuildSMTfromWitness(w)
+	smt1, err := smt.BuildSMTFromWitness(w)
 	require.NoError(t, err, "Could not restore trie from the block witness: %v", err)
 
 	rl := &trie.AlwaysTrueRetainDecider{}
-	_, err = smt1.BuildWitness(rl, context.Background())
+	w2, err := smt1.BuildWitness(rl, context.Background())
 	require.NoError(t, err, "error building witness")
+
+	//create writer
+	var buff bytes.Buffer
+	w.WriteDiff(w2, &buff)
+	diff := buff.String()
+	if len(diff) > 0 {
+		fmt.Println(diff)
+	}
+	assert.Equal(t, 0, len(diff), "witnesses should be equal")
 }

@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"math/big"
 
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"
@@ -47,7 +48,7 @@ func (s *RoSMT) BuildWitness(rd trie.RetainDecider, ctx context.Context) (*trie.
 			}
 
 			if !retain {
-				h := libcommon.BigToHash(k.ToBigInt())
+				h := common.BigToHash(k.ToBigInt())
 				hNode := trie.OperatorHash{Hash: h}
 				operands = append(operands, &hNode)
 				return false, nil
@@ -56,7 +57,12 @@ func (s *RoSMT) BuildWitness(rd trie.RetainDecider, ctx context.Context) (*trie.
 
 		if v.IsFinalNode() {
 			actualK, err := s.DbRo.GetHashKey(k)
-			if err != nil {
+			if err == db.ErrNotFound {
+				h := common.BigToHash(k.ToBigInt())
+				hNode := trie.OperatorHash{Hash: h}
+				operands = append(operands, &hNode)
+				return false, nil
+			} else if err != nil {
 				return false, err
 			}
 
@@ -86,11 +92,15 @@ func (s *RoSMT) BuildWitness(rd trie.RetainDecider, ctx context.Context) (*trie.
 				operands = append(operands, &trie.OperatorCode{Code: code})
 			}
 
+			storageBytes := storage.Bytes()
+			if t != utils.SC_STORAGE {
+				storageBytes = []byte{}
+			}
 			// fmt.Printf("Node hash: %s, Node type: %d, address %x, storage %x, value %x\n", utils.ConvertBigIntToHex(k.ToBigInt()), t, addr, storage, utils.ArrayBigToScalar(value8).Bytes())
 			operands = append(operands, &trie.OperatorSMTLeafValue{
 				NodeType:   uint8(t),
 				Address:    addr.Bytes(),
-				StorageKey: storage.Bytes(),
+				StorageKey: storageBytes,
 				Value:      vInBytes,
 			})
 			return false, nil
@@ -118,7 +128,7 @@ func (s *RoSMT) BuildWitness(rd trie.RetainDecider, ctx context.Context) (*trie.
 }
 
 // BuildSMTfromWitness builds SMT from witness
-func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
+func BuildSMTFromWitness(w *trie.Witness) (*SMT, error) {
 	// using memdb
 	s := NewSMT(nil, false)
 
@@ -135,7 +145,7 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 
 	type nodeHash struct {
 		path []int
-		hash libcommon.Hash
+		hash common.Hash
 	}
 
 	nodeHashes := make([]nodeHash, 0)
@@ -144,8 +154,7 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 		switch op := operator.(type) {
 		case *trie.OperatorSMTLeafValue:
 			valScaler := big.NewInt(0).SetBytes(op.Value)
-			addr := libcommon.BytesToAddress(op.Address)
-
+			addr := common.BytesToAddress(op.Address)
 			switch op.NodeType {
 			case utils.KEY_BALANCE:
 				balanceMap[addr.String()] = valScaler
@@ -176,7 +185,7 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 			}
 
 		case *trie.OperatorCode:
-			addr := libcommon.BytesToAddress(w.Operators[i+1].(*trie.OperatorSMTLeafValue).Address)
+			addr := common.BytesToAddress(w.Operators[i+1].(*trie.OperatorSMTLeafValue).Address)
 
 			code := hexutils.BytesToHex(op.Code)
 			if len(code) > 0 {
@@ -268,12 +277,4 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 	}
 
 	return s, nil
-}
-
-func intArrayToString(a []int) string {
-	s := ""
-	for _, v := range a {
-		s += fmt.Sprintf("%d", v)
-	}
-	return s
 }
