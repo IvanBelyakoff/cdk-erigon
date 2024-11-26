@@ -178,7 +178,7 @@ func MergeWitnesses(ctx context.Context, witnesses []*trie.Witness) (*trie.Witne
 		return witnesses[0], nil
 	}
 
-	baseSmt, err := smt.BuildSMTfromWitness(witnesses[0])
+	baseSmt, err := smt.BuildSMTFromWitness(witnesses[0])
 	if err != nil {
 		return nil, fmt.Errorf("BuildSMTfromWitness: %w", err)
 	}
