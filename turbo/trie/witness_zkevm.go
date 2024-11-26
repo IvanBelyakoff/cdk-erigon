@@ -1,4 +1,4 @@
-package smt
+package trie
 
 import (
 	"fmt"
@@ -6,27 +6,23 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
-	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"
 )
 
 type AddressData struct {
 	Balance *big.Int
 	Nonce   *big.Int
-	Code    string
+	Code    []byte
 	Storage map[string]string
 }
 
 // BuildSMTfromWitness builds SMT from witness
-func GetAddressValues(w *trie.Witness) (map[libcommon.Address]AddressData, error) {
-	// using memdb
-	s := NewSMT(nil, false)
-
+func (w *Witness) GetAddressValues() (map[libcommon.Address]AddressData, error) {
 	addressDataMap := make(map[libcommon.Address]AddressData)
 
 	for i, operator := range w.Operators {
 		switch op := operator.(type) {
-		case *trie.OperatorSMTLeafValue:
+		case *OperatorSMTLeafValue:
 			valScaler := big.NewInt(0).SetBytes(op.Value)
 			addr := libcommon.BytesToAddress(op.Address)
 
@@ -53,25 +49,17 @@ func GetAddressValues(w *trie.Witness) (map[libcommon.Address]AddressData, error
 
 				addressData.Storage[stKey] = valScaler.String()
 			}
-
-		case *trie.OperatorCode:
-			addr := libcommon.BytesToAddress(w.Operators[i+1].(*trie.OperatorSMTLeafValue).Address)
+			addressDataMap[addr] = addressData
+		case *OperatorCode:
+			addr := libcommon.BytesToAddress(w.Operators[i+1].(*OperatorSMTLeafValue).Address)
 			addressData, ok := addressDataMap[addr]
 			if !ok {
 				addressData = AddressData{}
 			}
-			code := hexutils.BytesToHex(op.Code)
-			if len(code) > 0 {
-				if err := s.Db.AddCode(hexutils.HexToBytes(code)); err != nil {
-					return nil, err
-				}
-				code = fmt.Sprintf("0x%s", code)
-			}
-
-			addressData.Code = code
-
-		case *trie.OperatorBranch:
-		case *trie.OperatorHash:
+			addressData.Code = op.Code
+			addressDataMap[addr] = addressData
+		case *OperatorBranch:
+		case *OperatorHash:
 		default:
 			// Unsupported operator type
 			return nil, fmt.Errorf("unsupported operator type: %T", op)

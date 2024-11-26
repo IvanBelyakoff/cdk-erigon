@@ -12,6 +12,7 @@ import (
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/status-im/keycard-go/hexutils"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
@@ -145,7 +146,7 @@ func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, tds trieDbState,
 	eridb := db2.NewRoEriDb(tx)
 	smtTrie := smt.NewRoSMT(eridb)
 
-	if witness, err = smt.BuildWitness(smtTrie, rl, ctx); err != nil {
+	if witness, err = smtTrie.BuildWitness(rl, ctx); err != nil {
 		return nil, fmt.Errorf("BuildWitness: %w", err)
 	}
 
@@ -168,7 +169,6 @@ func ParseWitnessFromBytes(input []byte, trace bool) (*trie.Witness, error) {
 // corresponds to a witness built on a range of blocks
 // input witnesses should be ordered by consequent blocks
 // it replaces values from 2,3,4 into the first witness
-// it does this through creating tries from the witnesses, merging the tries and then creating a witness from the rsulting trie
 func MergeWitnesses(ctx context.Context, witnesses []*trie.Witness) (*trie.Witness, error) {
 	if len(witnesses) == 0 {
 		return nil, ErrNoWitnesses
@@ -180,35 +180,38 @@ func MergeWitnesses(ctx context.Context, witnesses []*trie.Witness) (*trie.Witne
 
 	baseSmt, err := smt.BuildSMTfromWitness(witnesses[0])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("BuildSMTfromWitness: %w", err)
 	}
 	for i := 1; i < len(witnesses); i++ {
-		addressDataMap, err := smt.GetAddressValues(witnesses[i])
+		addressDataMap, err := witnesses[i].GetAddressValues()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetAddressValues: %w", err)
 		}
 
 		for address, data := range addressDataMap {
 			if data.Balance != nil {
 				if _, err := baseSmt.SetAccountBalance(address.String(), data.Balance); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("SetAccountBalance: %w", err)
 				}
 			}
 			if data.Nonce != nil {
 				if _, err := baseSmt.SetAccountNonce(address.String(), data.Nonce); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("SetAccountNonce: %w", err)
 				}
 			}
 
 			if data.Storage != nil {
 				if _, err := baseSmt.SetContractStorage(address.String(), data.Storage, nil); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("SetContractStorage: %w", err)
 				}
 			}
 
 			if len(data.Code) != 0 {
-				if err := baseSmt.SetContractBytecode(address.String(), data.Code); err != nil {
-					return nil, err
+				if err := baseSmt.SetContractBytecode(address.String(), hexutils.BytesToHex(data.Code)); err != nil {
+					return nil, fmt.Errorf("SetContractBytecode: %w", err)
+				}
+				if err := baseSmt.Db.AddCode(data.Code); err != nil {
+					return nil, fmt.Errorf("AddCode: %w", err)
 				}
 			}
 		}
@@ -217,5 +220,10 @@ func MergeWitnesses(ctx context.Context, witnesses []*trie.Witness) (*trie.Witne
 	// if full is true, we will send all the nodes to the witness
 	rl := &trie.AlwaysTrueRetainDecider{}
 
-	return smt.BuildWitness(baseSmt.RoSMT, rl, ctx)
+	witness, err := baseSmt.BuildWitness(rl, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("BuildWitness: %w", err)
+	}
+
+	return witness, nil
 }

@@ -245,6 +245,25 @@ func (w *Witness) WriteDiff(w2 *Witness, output io.Writer) {
 					fmt.Fprintf(output, "leafVal o1[%d].Value = %x; o2[%d].Value = %x\n", i, o1.Value, i, o2.Value)
 				}
 			}
+		case *OperatorSMTLeafValue:
+			o2, ok := w2.Operators[i].(*OperatorSMTLeafValue)
+			if !ok {
+				fmt.Fprintf(output, "o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)
+			} else {
+				if !bytes.Equal(o1.Address, o2.Address) {
+					fmt.Fprintf(output, "smtLeaf o1[%d].Address = %x; o2[%d].Address = %x\n", i, o1.Address, i, o2.Address)
+				}
+				if !bytes.Equal(o1.StorageKey, o2.StorageKey) {
+					fmt.Fprintf(output, "smtLeaf o1[%d].StorageKey = %x; o2[%d].StorageKey = %x\n", i, o1.StorageKey, i, o2.StorageKey)
+				}
+				if !bytes.Equal(o1.Value, o2.Value) {
+					fmt.Fprintf(output, "smtLeaf o1[%d].Value = %x; o2[%d].Value = %x\n", i, o1.Value, i, o2.Value)
+				}
+				if o1.NodeType != o2.NodeType {
+					fmt.Fprintf(output, "smtLeaf o1[%d].NodeType = %d; o2[%d].NodeType = %d\n", i, o1.NodeType, i, o2.NodeType)
+				}
+			}
+
 		default:
 			o2 := w2.Operators[i]
 			fmt.Fprintf(output, "unexpected o1[%d] = %T %+v; o2[%d] = %T %+v\n", i, o1, o1, i, o2, o2)

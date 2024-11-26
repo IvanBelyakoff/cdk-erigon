@@ -13,6 +13,7 @@ import (
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/status-im/keycard-go/hexutils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,17 +24,24 @@ func TestMergeWitnesses(t *testing.T) {
 
 	random := rand.New(rand.NewSource(0))
 
-	numberOfAccounts := 10000
-	addresses := make(map[string]smt.AddressData, numberOfAccounts)
+	numberOfAccounts := 500
+	addresses := make(map[string]trie.AddressData, numberOfAccounts)
 
-	for i := 0; i < len(addresses); i++ {
+	for i := 0; i < numberOfAccounts; i++ {
 		a := getAddressForIndex(i)
 		addressBytes := crypto.Keccak256(a[:])
 		address := common.BytesToAddress(addressBytes).String()
 		balance := new(big.Int).Rand(random, new(big.Int).Exp(common.Big2, common.Big256, nil))
 		nonce := new(big.Int).Rand(random, new(big.Int).Exp(common.Big2, common.Big256, nil))
+		bytecode := "afafaf"
+		contractStorage := make(map[string]string)
+		for j := 0; j < 10; j++ {
+			storageKey := genRandomByteArrayOfLen(32)
+			storageValue := genRandomByteArrayOfLen(32)
+			contractStorage[common.BytesToHash(storageKey).Hex()] = common.BytesToHash(storageValue).Hex()
+		}
 
-		addresses[address] = smt.AddressData{
+		addresses[address] = trie.AddressData{
 			Balance: balance,
 			Nonce:   nonce,
 		}
@@ -53,6 +61,18 @@ func TestMergeWitnesses(t *testing.T) {
 			t.Error(err)
 			return
 		}
+		if err := smtPart.SetContractBytecode(address, bytecode); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := smtPart.Db.AddCode(hexutils.HexToBytes(bytecode)); err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := smtPart.SetContractStorage(address, contractStorage, nil); err != nil {
+			t.Error(err)
+			return
+		}
 
 		if _, err := smtFull.SetAccountBalance(address, balance); err != nil {
 			t.Error(err)
@@ -62,24 +82,36 @@ func TestMergeWitnesses(t *testing.T) {
 			t.Error(err)
 			return
 		}
+		if err := smtFull.SetContractBytecode(address, bytecode); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := smtFull.Db.AddCode(hexutils.HexToBytes(bytecode)); err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := smtFull.SetContractStorage(address, contractStorage, nil); err != nil {
+			t.Error(err)
+			return
+		}
 	}
 
 	rl1 := &trie.AlwaysTrueRetainDecider{}
 	rl2 := &trie.AlwaysTrueRetainDecider{}
 	rlFull := &trie.AlwaysTrueRetainDecider{}
-	witness1, err := smt.BuildWitness(smt1.RoSMT, rl1, context.Background())
+	witness1, err := smt1.BuildWitness(rl1, context.Background())
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	witness2, err := smt.BuildWitness(smt2.RoSMT, rl2, context.Background())
+	witness2, err := smt2.BuildWitness(rl2, context.Background())
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	witnessFull, err := smt.BuildWitness(smtFull.RoSMT, rlFull, context.Background())
+	witnessFull, err := smtFull.BuildWitness(rlFull, context.Background())
 	if err != nil {
 		t.Error(err)
 		return
@@ -109,4 +141,24 @@ func genRandomByteArrayOfLen(length uint) []byte {
 		array[i] = byte(rand.Intn(256))
 	}
 	return array
+}
+
+func TestMergeRealWitnesses(t *testing.T) {
+	blockWitness1, err := ParseWitnessFromBytes(witness1, false)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	blockWitness2, err := ParseWitnessFromBytes(witness2, false)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	_, err = MergeWitnesses(context.Background(), []*trie.Witness{blockWitness1, blockWitness2})
+	if err != nil {
+		t.Error(err)
+		return
+	}
 }

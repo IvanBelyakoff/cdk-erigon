@@ -12,7 +12,7 @@ import (
 )
 
 // BuildWitness creates a witness from the SMT
-func BuildWitness(s *RoSMT, rd trie.RetainDecider, ctx context.Context) (*trie.Witness, error) {
+func (s *RoSMT) BuildWitness(rd trie.RetainDecider, ctx context.Context) (*trie.Witness, error) {
 	operands := make([]trie.WitnessOperator, 0)
 
 	root, err := s.DbRo.GetLastRoot()
@@ -165,7 +165,6 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 
 				storageMap[addr.String()][stKey] = valScaler.String()
 			}
-
 			path = path[:len(path)-1]
 			NodeChildCountMap[intArrayToString(path)] += 1
 
@@ -212,7 +211,6 @@ func BuildSMTfromWitness(w *trie.Witness) (*SMT, error) {
 			pathCopy := make([]int, len(path))
 			copy(pathCopy, path)
 			nodeHashes = append(nodeHashes, nodeHash{path: pathCopy, hash: op.Hash})
-
 			path = path[:len(path)-1]
 			NodeChildCountMap[intArrayToString(path)] += 1
 
