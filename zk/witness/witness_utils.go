@@ -12,7 +12,6 @@ import (
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
-	"github.com/status-im/keycard-go/hexutils"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
@@ -183,37 +182,8 @@ func MergeWitnesses(ctx context.Context, witnesses []*trie.Witness) (*trie.Witne
 		return nil, fmt.Errorf("BuildSMTfromWitness: %w", err)
 	}
 	for i := 1; i < len(witnesses); i++ {
-		addressDataMap, err := witnesses[i].GetAddressValues()
-		if err != nil {
-			return nil, fmt.Errorf("GetAddressValues: %w", err)
-		}
-
-		for address, data := range addressDataMap {
-			if data.Balance != nil {
-				if _, err := baseSmt.SetAccountBalance(address.String(), data.Balance); err != nil {
-					return nil, fmt.Errorf("SetAccountBalance: %w", err)
-				}
-			}
-			if data.Nonce != nil {
-				if _, err := baseSmt.SetAccountNonce(address.String(), data.Nonce); err != nil {
-					return nil, fmt.Errorf("SetAccountNonce: %w", err)
-				}
-			}
-
-			if data.Storage != nil {
-				if _, err := baseSmt.SetContractStorage(address.String(), data.Storage, nil); err != nil {
-					return nil, fmt.Errorf("SetContractStorage: %w", err)
-				}
-			}
-
-			if len(data.Code) != 0 {
-				if err := baseSmt.SetContractBytecode(address.String(), hexutils.BytesToHex(data.Code)); err != nil {
-					return nil, fmt.Errorf("SetContractBytecode: %w", err)
-				}
-				if err := baseSmt.Db.AddCode(data.Code); err != nil {
-					return nil, fmt.Errorf("AddCode: %w", err)
-				}
-			}
+		if err := smt.AddWitnessToSMT(baseSmt, witnesses[i]); err != nil {
+			return nil, fmt.Errorf("AddWitnessToSMT: %w", err)
 		}
 	}
 

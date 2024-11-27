@@ -92,15 +92,15 @@ func (s *RoSMT) BuildWitness(rd trie.RetainDecider, ctx context.Context) (*trie.
 				operands = append(operands, &trie.OperatorCode{Code: code})
 			}
 
-			storageBytes := storage.Bytes()
+			storageKeyBytes := storage.Bytes()
 			if t != utils.SC_STORAGE {
-				storageBytes = []byte{}
+				storageKeyBytes = []byte{}
 			}
 			// fmt.Printf("Node hash: %s, Node type: %d, address %x, storage %x, value %x\n", utils.ConvertBigIntToHex(k.ToBigInt()), t, addr, storage, utils.ArrayBigToScalar(value8).Bytes())
 			operands = append(operands, &trie.OperatorSMTLeafValue{
 				NodeType:   uint8(t),
 				Address:    addr.Bytes(),
-				StorageKey: storageBytes,
+				StorageKey: storageKeyBytes,
 				Value:      vInBytes,
 			})
 			return false, nil
@@ -132,6 +132,14 @@ func BuildSMTFromWitness(w *trie.Witness) (*SMT, error) {
 	// using memdb
 	s := NewSMT(nil, false)
 
+	if err := AddWitnessToSMT(s, w); err != nil {
+		return nil, fmt.Errorf("AddWitnessToSMT: %w", err)
+	}
+
+	return s, nil
+}
+
+func AddWitnessToSMT(s *SMT, w *trie.Witness) error {
 	balanceMap := make(map[string]*big.Int)
 	nonceMap := make(map[string]*big.Int)
 	contractMap := make(map[string]string)
@@ -190,7 +198,7 @@ func BuildSMTFromWitness(w *trie.Witness) (*SMT, error) {
 			code := hexutils.BytesToHex(op.Code)
 			if len(code) > 0 {
 				if err := s.Db.AddCode(hexutils.HexToBytes(code)); err != nil {
-					return nil, err
+					return err
 				}
 				code = fmt.Sprintf("0x%s", code)
 			}
@@ -232,49 +240,52 @@ func BuildSMTFromWitness(w *trie.Witness) (*SMT, error) {
 
 		default:
 			// Unsupported operator type
-			return nil, fmt.Errorf("unsupported operator type: %T", op)
+			return fmt.Errorf("unsupported operator type: %T", op)
 		}
 	}
 
 	for _, nodeHash := range nodeHashes {
-		_, err := s.InsertHashNode(nodeHash.path, nodeHash.hash.Big())
+		// should not replace with hash node if there are nodes under it on the current smt
+		// we would lose needed data i we replace it with a hash node
+		node, err := s.GetNodeAtPath(nodeHash.path)
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("GetNodeAtPath: %w", err)
+		}
+		if node != nil {
+			continue
+		}
+		if _, err := s.InsertHashNode(nodeHash.path, nodeHash.hash.Big()); err != nil {
+			return fmt.Errorf("InsertHashNode: %w", err)
 		}
 
-		_, err = s.Db.GetLastRoot()
-		if err != nil {
-			return nil, err
+		if _, err = s.Db.GetLastRoot(); err != nil {
+			return fmt.Errorf("GetLastRoot: %w", err)
 		}
 	}
 
 	for addr, balance := range balanceMap {
-		_, err := s.SetAccountBalance(addr, balance)
-		if err != nil {
-			return nil, err
+		if _, err := s.SetAccountBalance(addr, balance); err != nil {
+			return fmt.Errorf("SetAccountBalance: %w", err)
 		}
 	}
 
 	for addr, nonce := range nonceMap {
-		_, err := s.SetAccountNonce(addr, nonce)
-		if err != nil {
-			return nil, err
+		if _, err := s.SetAccountNonce(addr, nonce); err != nil {
+			return fmt.Errorf("SetAccountNonce: %w", err)
 		}
 	}
 
 	for addr, code := range contractMap {
-		err := s.SetContractBytecode(addr, code)
-		if err != nil {
-			return nil, err
+		if err := s.SetContractBytecode(addr, code); err != nil {
+			return fmt.Errorf("SetContractBytecode: %w", err)
 		}
 	}
 
 	for addr, storage := range storageMap {
-		_, err := s.SetContractStorage(addr, storage, nil)
-		if err != nil {
-			fmt.Println("error : unable to set contract storage", err)
+		if _, err := s.SetContractStorage(addr, storage, nil); err != nil {
+			return fmt.Errorf("SetContractStorage: %w", err)
 		}
 	}
 
-	return s, nil
+	return nil
 }

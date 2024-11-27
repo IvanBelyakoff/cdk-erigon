@@ -1081,33 +1081,37 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 
-	blockWitnesses := make([]*trie.Witness, 0, endBlockNr-blockNr+1)
-	//try to get them from the db, if all are available - do not unwind and generate
-	for blockNum := blockNr; blockNum <= endBlockNr; blockNum++ {
-		witnessBytes, err := hermezDb.GetWitnessCache(blockNum)
-		if err != nil {
-			return nil, err
+	// we only keep trimmed witnesses in the db
+	if witnessMode == WitnessModeTrimmed {
+		blockWitnesses := make([]*trie.Witness, 0, endBlockNr-blockNr+1)
+		//try to get them from the db, if all are available - do not unwind and generate
+		for blockNum := blockNr; blockNum <= endBlockNr; blockNum++ {
+			witnessBytes, err := hermezDb.GetWitnessCache(blockNum)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(witnessBytes) == 0 {
+				break
+			}
+
+			blockWitness, err := witness.ParseWitnessFromBytes(witnessBytes, false)
+			if err != nil {
+				return nil, err
+			}
+
+			blockWitnesses = append(blockWitnesses, blockWitness)
 		}
 
-		if len(witnessBytes) == 0 {
-			break
-		}
+		if len(blockWitnesses) == int(endBlockNr-blockNr+1) {
+			// found all, calculate
+			baseWitness, err := witness.MergeWitnesses(ctx, blockWitnesses)
+			if err != nil {
+				return nil, err
+			}
 
-		blockWitness, err := witness.ParseWitnessFromBytes(witnessBytes, false)
-		if err != nil {
-			return nil, err
+			return witness.GetWitnessBytes(baseWitness, debug)
 		}
-		blockWitnesses = append(blockWitnesses, blockWitness)
-	}
-
-	if len(blockWitnesses) == int(endBlockNr-blockNr+1) {
-		// found all, calculate
-		baseWitness, err := witness.MergeWitnesses(ctx, blockWitnesses)
-		if err != nil {
-			return nil, err
-		}
-
-		return witness.GetWitnessBytes(baseWitness, debug)
 	}
 
 	generator, fullWitness, err := api.buildGenerator(ctx, tx, witnessMode)

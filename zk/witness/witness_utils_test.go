@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -25,7 +26,6 @@ func TestMergeWitnesses(t *testing.T) {
 	random := rand.New(rand.NewSource(0))
 
 	numberOfAccounts := 500
-	addresses := make(map[string]trie.AddressData, numberOfAccounts)
 
 	for i := 0; i < numberOfAccounts; i++ {
 		a := getAddressForIndex(i)
@@ -39,11 +39,6 @@ func TestMergeWitnesses(t *testing.T) {
 			storageKey := genRandomByteArrayOfLen(32)
 			storageValue := genRandomByteArrayOfLen(32)
 			contractStorage[common.BytesToHash(storageKey).Hex()] = common.BytesToHash(storageValue).Hex()
-		}
-
-		addresses[address] = trie.AddressData{
-			Balance: balance,
-			Nonce:   nonce,
 		}
 		var smtPart *smt.SMT
 
@@ -144,21 +139,65 @@ func genRandomByteArrayOfLen(length uint) []byte {
 }
 
 func TestMergeRealWitnesses(t *testing.T) {
-	blockWitness1, err := ParseWitnessFromBytes(witness1, false)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	witnessBytes1, err := hex.DecodeString(witness1)
+	assert.NoError(t, err, "error decoding witness1")
+	witnessBytes2, err := hex.DecodeString(witness2)
+	assert.NoError(t, err, "error decoding witness2")
+	expectedWitnessBytes, err := hex.DecodeString(resultWitness)
+	assert.NoError(t, err, "error decoding expectedWitness")
 
-	blockWitness2, err := ParseWitnessFromBytes(witness2, false)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	blockWitness1, err := ParseWitnessFromBytes(witnessBytes1, false)
+	assert.NoError(t, err, "error parsing witness1")
+	blockWitness2, err := ParseWitnessFromBytes(witnessBytes2, false)
+	assert.NoError(t, err, "error parsing witness2")
+	expectedWitness, err := ParseWitnessFromBytes(expectedWitnessBytes, false)
+	assert.NoError(t, err, "error parsing expectedWitness")
 
-	_, err = MergeWitnesses(context.Background(), []*trie.Witness{blockWitness1, blockWitness2})
-	if err != nil {
-		t.Error(err)
-		return
+	mergedWitness, err := MergeWitnesses(context.Background(), []*trie.Witness{blockWitness1, blockWitness2})
+	assert.NoError(t, err, "error merging witnesses")
+
+	//create writer
+	var buff bytes.Buffer
+	expectedWitness.WriteDiff(mergedWitness, &buff)
+	diff := buff.String()
+	if len(diff) > 0 {
+		fmt.Println(diff)
 	}
+	assert.Equal(t, 0, len(diff), "witnesses should be equal")
+}
+
+func TestMergeWitnessesWithHashNodes(t *testing.T) {
+	smt1 := smt.NewSMT(nil, false)
+	smt2 := smt.NewSMT(nil, false)
+	smtFull := smt.NewSMT(nil, false)
+
+	_, err := smt1.InsertHashNode([]int{0, 0, 0}, new(big.Int).SetUint64(1))
+	assert.NoError(t, err, "error inserting hash node")
+	_, err = smt2.InsertHashNode([]int{0, 0}, new(big.Int).SetUint64(2))
+	assert.NoError(t, err, "error inserting hash node")
+	_, err = smtFull.InsertHashNode([]int{0, 0, 0}, new(big.Int).SetUint64(1))
+	assert.NoError(t, err, "error inserting hash node")
+
+	// get witnesses
+	rl1 := &trie.AlwaysTrueRetainDecider{}
+	rl2 := &trie.AlwaysTrueRetainDecider{}
+	rlFull := &trie.AlwaysTrueRetainDecider{}
+	blockWitness1, err := smt1.BuildWitness(rl1, context.Background())
+	assert.NoError(t, err, "error building witness")
+	blockWitness2, err := smt2.BuildWitness(rl2, context.Background())
+	assert.NoError(t, err, "error building witness")
+	expectedWitness, err := smtFull.BuildWitness(rlFull, context.Background())
+	assert.NoError(t, err, "error building witness")
+
+	mergedWitness, err := MergeWitnesses(context.Background(), []*trie.Witness{blockWitness1, blockWitness2})
+	assert.NoError(t, err, "error merging witnesses")
+
+	//create writer
+	var buff bytes.Buffer
+	expectedWitness.WriteDiff(mergedWitness, &buff)
+	diff := buff.String()
+	if len(diff) > 0 {
+		fmt.Println(diff)
+	}
+	assert.Equal(t, 0, len(diff), "witnesses should be equal")
 }
