@@ -242,7 +242,10 @@ func getBlocks(tx kv.Tx, startBlock, endBlock uint64) (blocks []*eritypes.Block,
 
 func UnwindWitnessStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg WitnessCfg, ctx context.Context) (err error) {
 	logPrefix := u.LogPrefix()
-
+	if cfg.zkCfg.WitnessCacheLimit == 0 {
+		log.Info(fmt.Sprintf("[%s] Skipping witness cache stage. Cache not set or limit is set to 0", logPrefix))
+		return nil
+	}
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		if tx, err = cfg.db.BeginRw(ctx); err != nil {
@@ -283,6 +286,10 @@ func UnwindWitnessStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg WitnessCfg, c
 
 func PruneWitnessStage(s *stagedsync.PruneState, tx kv.RwTx, cfg WitnessCfg, ctx context.Context) (err error) {
 	logPrefix := s.LogPrefix()
+	if cfg.zkCfg.WitnessCacheLimit == 0 {
+		log.Info(fmt.Sprintf("[%s] Skipping witness cache stage. Cache not set or limit is set to 0", logPrefix))
+		return nil
+	}
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -304,10 +311,6 @@ func PruneWitnessStage(s *stagedsync.PruneState, tx kv.RwTx, cfg WitnessCfg, ctx
 
 	if err := hermezDb.DeleteWitnessCaches(0, toBlock); err != nil {
 		return fmt.Errorf("DeleteWitnessCache: %w", err)
-	}
-
-	if err := stages.SaveStageProgress(tx, stages.Witness, toBlock); err != nil {
-		return fmt.Errorf("SaveStageProgress: %w", err)
 	}
 
 	log.Info(fmt.Sprintf("[%s] Saving stage progress", logPrefix), "stageProgress", 0)
