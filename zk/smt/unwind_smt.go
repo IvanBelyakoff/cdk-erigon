@@ -2,6 +2,7 @@ package smt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -31,6 +32,8 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 	}
 
 	eridb := db2.NewEriDb(tx)
+	eridb.RollbackBatch()
+
 	dbSmt := smt.NewSMT(eridb, false)
 
 	if !quiet {
@@ -39,173 +42,240 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 
 	// only open the batch if tx is not already one
 	if _, ok := tx.(*membatchwithdb.MemoryMutation); !ok {
-		eridb.OpenBatch(ctx.Done())
+		quit := make(chan struct{})
+		eridb.OpenBatch(quit)
 	}
 
-	ac, err := tx.CursorDupSort(kv.AccountChangeSet)
-	if err != nil {
-		return trie.EmptyRoot, err
+	changesGetter := NewChangesGetter(tx)
+	if err := changesGetter.openChangesGetter(from); err != nil {
+		return trie.EmptyRoot, fmt.Errorf("OpenChangesGetter: %w", err)
 	}
-	defer ac.Close()
-
-	sc, err := tx.CursorDupSort(kv.StorageChangeSet)
-	if err != nil {
-		return trie.EmptyRoot, err
-	}
-	defer sc.Close()
-
-	currentPsr := state.NewPlainStateReader(tx)
+	defer changesGetter.closeChangesGetter()
 
 	total := uint64(math.Abs(float64(from) - float64(to) + 1))
-	printerStopped := false
 	progressChan, stopPrinter := zk.ProgressPrinter(fmt.Sprintf("[%s] Progress unwinding", logPrefix), total, quiet)
-	defer func() {
-		if !printerStopped {
-			stopPrinter()
-		}
-	}()
+	defer stopPrinter()
 
 	// walk backwards through the blocks, applying state changes, and deletes
 	// PlainState contains data AT the block
 	// History tables contain data BEFORE the block - so need a +1 offset
-	accChanges := make(map[common.Address]*accounts.Account)
-	codeChanges := make(map[common.Address]string)
-	storageChanges := make(map[common.Address]map[string]string)
-
-	addDeletedAcc := func(addr common.Address) {
-		deletedAcc := new(accounts.Account)
-		deletedAcc.Balance = *uint256.NewInt(0)
-		deletedAcc.Nonce = 0
-		accChanges[addr] = deletedAcc
-	}
-
-	psr := state.NewPlainState(tx, from, systemcontracts.SystemContractCodeLookup["Hermez"])
-	defer psr.Close()
-
 	for i := from; i >= to+1; i-- {
 		select {
 		case <-ctx.Done():
-			return trie.EmptyRoot, fmt.Errorf("[%s] Context done", logPrefix)
+			return trie.EmptyRoot, fmt.Errorf("context done")
 		default:
 		}
 
-		psr.SetBlockNr(i)
-
-		dupSortKey := dbutils.EncodeBlockNumber(i)
-
-		// collect changes to accounts and code
-		for _, v, err2 := ac.SeekExact(dupSortKey); err2 == nil && v != nil; _, v, err2 = ac.NextDup() {
-
-			addr := common.BytesToAddress(v[:length.Addr])
-
-			// if the account was created in this changeset we should delete it
-			if len(v[length.Addr:]) == 0 {
-				codeChanges[addr] = ""
-				addDeletedAcc(addr)
-				continue
-			}
-
-			oldAcc, err := psr.ReadAccountData(addr)
-			if err != nil {
-				return trie.EmptyRoot, err
-			}
-
-			// currAcc at block we're unwinding from
-			currAcc, err := currentPsr.ReadAccountData(addr)
-			if err != nil {
-				return trie.EmptyRoot, err
-			}
-
-			if oldAcc.Incarnation > 0 {
-				if len(v) == 0 { // self-destructed
-					addDeletedAcc(addr)
-				} else {
-					if currAcc.Incarnation > oldAcc.Incarnation {
-						addDeletedAcc(addr)
-					}
-				}
-			}
-
-			// store the account
-			accChanges[addr] = oldAcc
-
-			if oldAcc.CodeHash != currAcc.CodeHash {
-				cc, err := currentPsr.ReadAccountCode(addr, oldAcc.Incarnation, oldAcc.CodeHash)
-				if err != nil {
-					return trie.EmptyRoot, err
-				}
-
-				ach := hexutils.BytesToHex(cc)
-				hexcc := ""
-				if len(ach) > 0 {
-					hexcc = "0x" + ach
-				}
-				codeChanges[addr] = hexcc
-			}
-		}
-
-		err = tx.ForPrefix(kv.StorageChangeSet, dupSortKey, func(sk, sv []byte) error {
-			changesetKey := sk[length.BlockNum:]
-			address, _ := dbutils.PlainParseStoragePrefix(changesetKey)
-
-			sstorageKey := sv[:length.Hash]
-			stk := common.BytesToHash(sstorageKey)
-
-			value := []byte{0}
-			if len(sv[length.Hash:]) != 0 {
-				value = sv[length.Hash:]
-			}
-
-			stkk := fmt.Sprintf("0x%032x", stk)
-			v := fmt.Sprintf("0x%032x", common.BytesToHash(value))
-
-			m := make(map[string]string)
-			m[stkk] = v
-
-			if storageChanges[address] == nil {
-				storageChanges[address] = make(map[string]string)
-			}
-			storageChanges[address][stkk] = v
-			return nil
-		})
-		if err != nil {
-			return trie.EmptyRoot, err
+		if err := changesGetter.getChangesForBlock(i); err != nil {
+			return trie.EmptyRoot, fmt.Errorf("getChangesForBlock: %w", err)
 		}
 
 		progressChan <- 1
 	}
 
 	stopPrinter()
-	printerStopped = true
 
-	if _, _, err := dbSmt.SetStorage(ctx, logPrefix, accChanges, codeChanges, storageChanges); err != nil {
-		return trie.EmptyRoot, err
-	}
-
-	if err := verifyLastHash(dbSmt, expectedRootHash, checkRoot, logPrefix, quiet); err != nil {
-		log.Error("failed to verify hash")
-		eridb.RollbackBatch()
-		return trie.EmptyRoot, err
-	}
-
-	if err := eridb.CommitBatch(); err != nil {
+	if _, _, err := dbSmt.SetStorage(ctx, logPrefix, changesGetter.accChanges, changesGetter.codeChanges, changesGetter.storageChanges); err != nil {
 		return trie.EmptyRoot, err
 	}
 
 	lr := dbSmt.LastRoot()
 
 	hash := common.BigToHash(lr)
-	return hash, nil
-}
-
-func verifyLastHash(dbSmt *smt.SMT, expectedRootHash *common.Hash, checkRoot bool, logPrefix string, quiet bool) error {
-	hash := common.BigToHash(dbSmt.LastRoot())
-
 	if checkRoot && hash != *expectedRootHash {
-		return fmt.Errorf("wrong trie root: %x, expected (from header): %x", hash, expectedRootHash)
+		log.Error("failed to verify hash")
+		return trie.EmptyRoot, fmt.Errorf("wrong trie root: %x, expected (from header): %x", hash, expectedRootHash)
 	}
+
 	if !quiet {
 		log.Info(fmt.Sprintf("[%s] Trie root matches", logPrefix), "hash", hash.Hex())
 	}
+
+	if err := eridb.CommitBatch(); err != nil {
+		return trie.EmptyRoot, err
+	}
+
+	return hash, nil
+}
+
+var (
+	ErrAlreadyOpened = errors.New("already opened")
+	ErrNotOpened     = errors.New("not opened")
+)
+
+type changesGetter struct {
+	tx kv.Tx
+
+	ac         kv.CursorDupSort
+	sc         kv.CursorDupSort
+	psr        *state.PlainState
+	currentPsr *state.PlainStateReader
+
+	accChanges     map[common.Address]*accounts.Account
+	codeChanges    map[common.Address]string
+	storageChanges map[common.Address]map[string]string
+
+	opened bool
+}
+
+func NewChangesGetter(tx kv.Tx) *changesGetter {
+	return &changesGetter{
+		tx:             tx,
+		accChanges:     make(map[common.Address]*accounts.Account),
+		codeChanges:    make(map[common.Address]string),
+		storageChanges: make(map[common.Address]map[string]string),
+	}
+}
+func (cg *changesGetter) addDeletedAcc(addr common.Address) {
+	deletedAcc := new(accounts.Account)
+	deletedAcc.Balance = *uint256.NewInt(0)
+	deletedAcc.Nonce = 0
+	cg.accChanges[addr] = deletedAcc
+}
+
+func (cg *changesGetter) openChangesGetter(from uint64) error {
+	if cg.opened {
+		return ErrAlreadyOpened
+	}
+
+	ac, err := cg.tx.CursorDupSort(kv.AccountChangeSet)
+	if err != nil {
+		return fmt.Errorf("CursorDupSort: %w", err)
+	}
+
+	sc, err := cg.tx.CursorDupSort(kv.StorageChangeSet)
+	if err != nil {
+		return fmt.Errorf("CursorDupSort: %w", err)
+	}
+
+	cg.ac = ac
+	cg.sc = sc
+	cg.psr = state.NewPlainState(cg.tx, from, systemcontracts.SystemContractCodeLookup["Hermez"])
+	cg.currentPsr = state.NewPlainStateReader(cg.tx)
+
+	cg.opened = true
+
+	return nil
+}
+
+func (cg *changesGetter) closeChangesGetter() {
+	if cg.ac != nil {
+		cg.ac.Close()
+	}
+
+	if cg.sc != nil {
+		cg.sc.Close()
+	}
+
+	if cg.psr != nil {
+		cg.psr.Close()
+	}
+}
+
+func (cg *changesGetter) getChangesForBlock(blockNum uint64) error {
+	if !cg.opened {
+		return ErrNotOpened
+	}
+
+	cg.psr.SetBlockNr(blockNum)
+	dupSortKey := dbutils.EncodeBlockNumber(blockNum)
+
+	// collect changes to accounts and code
+	for _, v, err2 := cg.ac.SeekExact(dupSortKey); err2 == nil && v != nil; _, v, err2 = cg.ac.NextDup() {
+		if err := cg.setAccountChangesFromV(v); err != nil {
+			return fmt.Errorf("failed to get account changes: %w", err)
+		}
+	}
+
+	if err := cg.tx.ForPrefix(kv.StorageChangeSet, dupSortKey, cg.setStorageChangesFromKv); err != nil {
+		return fmt.Errorf("failed to get storage changes: %w", err)
+	}
+
+	return nil
+}
+
+func (cg *changesGetter) setAccountChangesFromV(v []byte) error {
+	addr := common.BytesToAddress(v[:length.Addr])
+
+	// if the account was created in this changeset we should delete it
+	if len(v[length.Addr:]) == 0 {
+		cg.codeChanges[addr] = ""
+		cg.addDeletedAcc(addr)
+		return nil
+	}
+
+	oldAcc, err := cg.psr.ReadAccountData(addr)
+	if err != nil {
+		return fmt.Errorf("ReadAccountData: %w", err)
+	}
+
+	// currAcc at block we're unwinding from
+	currAcc, err := cg.currentPsr.ReadAccountData(addr)
+	if err != nil {
+		return fmt.Errorf("ReadAccountData: %w", err)
+	}
+
+	if oldAcc.Incarnation > 0 {
+		if len(v) == 0 { // self-destructed
+			cg.addDeletedAcc(addr)
+		} else {
+			if currAcc.Incarnation > oldAcc.Incarnation {
+				cg.addDeletedAcc(addr)
+			}
+		}
+	}
+
+	// store the account
+	cg.accChanges[addr] = oldAcc
+
+	if oldAcc.CodeHash != currAcc.CodeHash {
+		hexcc, err := cg.getCodehashChanges(addr, oldAcc)
+		if err != nil {
+			return fmt.Errorf("getCodehashChanges: %w", err)
+		}
+		cg.codeChanges[addr] = hexcc
+	}
+
+	return nil
+}
+
+func (cg *changesGetter) getCodehashChanges(addr common.Address, oldAcc *accounts.Account) (string, error) {
+	cc, err := cg.currentPsr.ReadAccountCode(addr, oldAcc.Incarnation, oldAcc.CodeHash)
+	if err != nil {
+		return "", fmt.Errorf("ReadAccountCode: %w", err)
+	}
+
+	ach := hexutils.BytesToHex(cc)
+	hexcc := ""
+	if len(ach) > 0 {
+		hexcc = "0x" + ach
+	}
+
+	return hexcc, nil
+}
+
+func (cg *changesGetter) setStorageChangesFromKv(sk, sv []byte) error {
+	changesetKey := sk[length.BlockNum:]
+	address, _ := dbutils.PlainParseStoragePrefix(changesetKey)
+
+	sstorageKey := sv[:length.Hash]
+	stk := common.BytesToHash(sstorageKey)
+
+	value := []byte{0}
+	if len(sv[length.Hash:]) != 0 {
+		value = sv[length.Hash:]
+	}
+
+	stkk := fmt.Sprintf("0x%032x", stk)
+	v := fmt.Sprintf("0x%032x", common.BytesToHash(value))
+
+	m := make(map[string]string)
+	m[stkk] = v
+
+	if cg.storageChanges[address] == nil {
+		cg.storageChanges[address] = make(map[string]string)
+	}
+	cg.storageChanges[address][stkk] = v
+
 	return nil
 }
