@@ -1904,5 +1904,5 @@ func (db *HermezDbReader) GetWitnessCache(blockNo uint64) ([]byte, error) {
 }
 
 func (db *HermezDb) DeleteWitnessCaches(from, to uint64) error {
-	return db.deleteFromBucketWithUintKeysRange(BATCH_ENDS, from, to)
+	return db.deleteFromBucketWithUintKeysRange(WITNESS_CACHE, from, to)
 }
