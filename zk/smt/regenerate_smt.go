@@ -18,7 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/zk"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 func RegenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.RwTx, eridb *db2.EriDb, smtIn *smt.SMT, toBlock uint64) (common.Hash, error) {

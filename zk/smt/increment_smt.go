@@ -16,7 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/status-im/keycard-go/hexutils"
 )
 
