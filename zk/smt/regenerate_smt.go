@@ -42,19 +42,16 @@ func RegenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 	dataCollectStartTime := time.Now()
 
 	// get total accounts count for progress printer
-	total := uint64(0)
-	if err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
-		total++
-		return nil
-	}); err != nil {
-		return trie.EmptyRoot, err
+	total, err := getTotalAccountCount(psr)
+	if err != nil {
+		return trie.EmptyRoot, fmt.Errorf("getTotalAccountCount: %w", err)
 	}
 
 	progressChan, stopProgressPrinter := zk.ProgressPrinterWithoutValues(fmt.Sprintf("[%s] SMT regenerate progress", logPrefix), total*2)
 	defer stopProgressPrinter()
 
 	progCt := uint64(0)
-	err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+	if err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
 		progCt++
 		progressChan <- progCt
 		var err error
@@ -88,13 +85,11 @@ func RegenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 			as[sk] = trimHexString(v)
 		}
 		return nil
-	})
-
-	stopProgressPrinter()
-
-	if err != nil {
+	}); err != nil {
 		return trie.EmptyRoot, err
 	}
+
+	stopProgressPrinter()
 
 	// process the final account
 	if err := accCollector.processAccount(a, as, inc, addr); err != nil {
@@ -123,6 +118,17 @@ func RegenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 	}
 
 	return common.BigToHash(root), nil
+}
+
+func getTotalAccountCount(psr *state.PlainStateReader) (uint64, error) {
+	total := uint64(0)
+	if err := psr.ForEach(kv.PlainState, nil, func(k, acc []byte) error {
+		total++
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func trimHexString(s string) string {
