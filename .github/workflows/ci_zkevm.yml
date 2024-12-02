@@ -83,11 +83,12 @@ jobs:
           ref: v0.2.21
           path: kurtosis-cdk
 
-      - name: Install Kurtosis CDK tools
+      - name: Install Kurtosis CDK tools (Kurtosis, yq, Foundry, disable analytics)
         uses: ./kurtosis-cdk/.github/actions/setup-kurtosis-cdk
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+
 
       - name: Build docker image
         working-directory: ./cdk-erigon
@@ -135,6 +136,7 @@ jobs:
         working-directory: ./kurtosis-cdk
         shell: bash
         run: timeout 900s .github/scripts/monitor-verified-batches.sh --enclave cdk-v1 --rpc-url $(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc) --target 20 --timeout 900
+
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
