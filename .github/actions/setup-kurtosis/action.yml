@@ -30,6 +30,7 @@ runs:
         /usr/local/bin/polycli version
     - name: Build docker image
       working-directory: ./cdk-erigon
+      shell: bash
       run: docker build -t cdk-erigon:local --file Dockerfile .
 
     - name: Remove unused flags
