@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
@@ -127,7 +128,7 @@ func Test_insertKVtoDb(t *testing.T) {
 		}
 
 		accCollector := NewAccountCollector(eriDb, psr)
-		err = accCollector.insertKVtoDb(tc.encodeKey, tc.ethAddress, tc.key, &tc.val)
+		err = accCollector.insertKVtoDb(tc.encodeKey, tc.ethAddress, tc.key, &tc.val, common.Hash{})
 		if tc.resultError != "" {
 			assert.ErrorContains(t, err, tc.resultError)
 			assert.Equal(t, 0, len(accCollector.keys))
