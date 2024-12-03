@@ -237,6 +237,16 @@ var (
 		Usage: "How often transactions should be committed to the storage",
 		Value: txpoolcfg.DefaultConfig.CommitEvery,
 	}
+	TxpoolPurgeEveryFlag = cli.DurationFlag{
+		Name:  "txpool.purge.every",
+		Usage: "How often transactions should be purged from the storage",
+		Value: txpoolcfg.DefaultConfig.PurgeEvery,
+	}
+	TxpoolPurgeDistanceFlag = cli.DurationFlag{
+		Name:  "txpool.purge.distance",
+		Usage: "Transactions older than this distance will be purged",
+		Value: txpoolcfg.DefaultConfig.PurgeDistance,
+	}
 	// Miner settings
 	MiningEnabledFlag = cli.BoolFlag{
 		Name:  "mine",
@@ -409,6 +419,11 @@ var (
 		Name:  "zkevm.l2-datastreamer-timeout",
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
 		Value: "3s",
+	}
+	L2ShortCircuitToVerifiedBatchFlag = cli.BoolFlag{
+		Name:  "zkevm.l2-short-circuit-to-verified-batch",
+		Usage: "Short circuit block execution up to the batch after the latest verified batch (default: true). When disabled, the sequencer will execute all downloaded batches",
+		Value: true,
 	}
 	L1SyncStartBlock = cli.Uint64Flag{
 		Name:  "zkevm.l1-sync-start-block",
@@ -752,6 +767,26 @@ var (
 		Name:  "zkevm.seal-batch-immediately-on-overflow",
 		Usage: "Seal the batch immediately when detecting a counter overflow",
 		Value: false,
+	}
+	MockWitnessGeneration = cli.BoolFlag{
+		Name:  "zkevm.mock-witness-generation",
+		Usage: "Mock the witness generation",
+		Value: false,
+	}
+	WitnessCacheEnable = cli.BoolFlag{
+		Name:  "zkevm.witness-cache-enable",
+		Usage: "Enable witness cache",
+		Value: false,
+	}
+	WitnessCacheLimit = cli.UintFlag{
+		Name:  "zkevm.witness-cache-limit",
+		Usage: "Amount of blocks behind the last executed one to keep witnesses for. Needs a lot of HDD space. Default value 10 000.",
+		Value: 10000,
+	}
+	WitnessContractInclusion = cli.StringFlag{
+		Name:  "zkevm.witness-contract-inclusion",
+		Usage: "Contracts that will have all of their storage added to the witness every time",
+		Value: "",
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
@@ -1904,6 +1939,12 @@ func setTxPool(ctx *cli.Context, fullCfg *ethconfig.Config) {
 		fullCfg.TxPool.BlobPriceBump = ctx.Uint64(TxPoolBlobPriceBumpFlag.Name)
 	}
 	cfg.CommitEvery = common2.RandomizeDuration(ctx.Duration(TxPoolCommitEveryFlag.Name))
+
+	purgeEvery := ctx.Duration(TxpoolPurgeEveryFlag.Name)
+	purgeDistance := ctx.Duration(TxpoolPurgeDistanceFlag.Name)
+
+	fullCfg.TxPool.PurgeEvery = common2.RandomizeDuration(purgeEvery)
+	fullCfg.TxPool.PurgeDistance = purgeDistance
 }
 
 func setEthash(ctx *cli.Context, datadir string, cfg *ethconfig.Config) {
