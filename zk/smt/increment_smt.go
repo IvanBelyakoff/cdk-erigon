@@ -17,7 +17,7 @@ func IncrementIntermediateHashes(ctx context.Context, logPrefix string, db kv.Rw
 	defer log.Info(fmt.Sprintf("[%s] Increment ended", logPrefix))
 
 	changesGetter := NewIncrementChangesGetter(db)
-	if err := changesGetter.openChangesGetter(from); err != nil {
+	if err := changesGetter.openChangesGetter(from + 1); err != nil {
 		return trie.EmptyRoot, fmt.Errorf("OpenChangesGetter: %w", err)
 	}
 	defer changesGetter.closeChangesGetter()
