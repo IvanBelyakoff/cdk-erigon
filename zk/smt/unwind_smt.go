@@ -38,7 +38,7 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 		eridb.OpenBatch(quit)
 	}
 
-	changesGetter := NewChangesGetter(tx)
+	changesGetter := NewUnwindChangesGetter(tx)
 	if err := changesGetter.openChangesGetter(from); err != nil {
 		return trie.EmptyRoot, fmt.Errorf("OpenChangesGetter: %w", err)
 	}

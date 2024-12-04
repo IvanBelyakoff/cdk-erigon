@@ -16,7 +16,7 @@ func IncrementIntermediateHashes(ctx context.Context, logPrefix string, db kv.Rw
 	log.Info(fmt.Sprintf("[%s] Increment trie hashes started", logPrefix), "previousRootHeight", from, "calculatingRootHeight", to)
 	defer log.Info(fmt.Sprintf("[%s] Increment ended", logPrefix))
 
-	changesGetter := NewChangesGetter(db)
+	changesGetter := NewIncrementChangesGetter(db)
 	if err := changesGetter.openChangesGetter(from); err != nil {
 		return trie.EmptyRoot, fmt.Errorf("OpenChangesGetter: %w", err)
 	}
@@ -51,15 +51,11 @@ func IncrementIntermediateHashes(ctx context.Context, logPrefix string, db kv.Rw
 
 	log.Info(fmt.Sprintf("[%s] Increment trie hashes finished. Commiting batch", logPrefix))
 
-	lr := dbSmt.LastRoot()
-
-	hash := common.BigToHash(lr)
-
 	// do not put this outside, because sequencer uses this function to calculate root for each block
 	hermezDb := hermez_db.NewHermezDb(db)
 	if err := hermezDb.WriteSmtDepth(to, uint64(dbSmt.GetDepth())); err != nil {
 		return trie.EmptyRoot, err
 	}
 
-	return hash, nil
+	return common.BigToHash(dbSmt.LastRoot()), nil
 }

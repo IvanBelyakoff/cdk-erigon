@@ -34,15 +34,25 @@ type changesGetter struct {
 	codeChanges    map[common.Address]string
 	storageChanges map[common.Address]map[string]string
 
-	opened bool
+	deleter bool
+	opened  bool
 }
 
-func NewChangesGetter(tx kv.Tx) *changesGetter {
+func NewUnwindChangesGetter(tx kv.Tx) *changesGetter {
+	return newChangesGetter(tx, true)
+}
+
+func NewIncrementChangesGetter(tx kv.Tx) *changesGetter {
+	return newChangesGetter(tx, false)
+}
+
+func newChangesGetter(tx kv.Tx, deleter bool) *changesGetter {
 	return &changesGetter{
 		tx:             tx,
 		accChanges:     make(map[common.Address]*accounts.Account),
 		codeChanges:    make(map[common.Address]string),
 		storageChanges: make(map[common.Address]map[string]string),
+		deleter:        deleter,
 	}
 }
 func (cg *changesGetter) addDeletedAcc(addr common.Address) {
@@ -113,25 +123,47 @@ func (cg *changesGetter) getChangesForBlock(blockNum uint64) error {
 	return nil
 }
 
-func (cg *changesGetter) setAccountChangesFromV(v []byte) error {
+func (cg *changesGetter) setAccountChangesFromV(v []byte) (err error) {
 	addr := common.BytesToAddress(v[:length.Addr])
-
-	// if the account was created in this changeset we should delete it
-	if len(v[length.Addr:]) == 0 {
-		cg.codeChanges[addr] = ""
-		cg.addDeletedAcc(addr)
-		return nil
-	}
 
 	oldAcc, err := cg.psr.ReadAccountData(addr)
 	if err != nil {
 		return fmt.Errorf("ReadAccountData: %w", err)
 	}
 
-	// currAcc at block we're unwinding from
+	var hashesMatch bool
+	if cg.deleter {
+		if hashesMatch, err = cg.processDeletedAcc(addr, oldAcc, v); err != nil {
+			return fmt.Errorf("processDeletedAcc: %w", err)
+		}
+	}
+
+	// store the account
+	cg.accChanges[addr] = oldAcc
+
+	if !cg.deleter || hashesMatch {
+		hexcc, err := cg.getCodehashChanges(addr, oldAcc)
+		if err != nil {
+			return fmt.Errorf("getCodehashChanges: %w", err)
+		}
+		cg.codeChanges[addr] = hexcc
+	}
+
+	return nil
+}
+
+func (cg *changesGetter) processDeletedAcc(addr common.Address, oldAcc *accounts.Account, v []byte) (bool, error) {
+	// if the account was created in this changeset we should delete it
+	if len(v[length.Addr:]) == 0 {
+		cg.codeChanges[addr] = ""
+		cg.addDeletedAcc(addr)
+		return false, nil
+	}
+
+	// currAcc at block
 	currAcc, err := cg.currentPsr.ReadAccountData(addr)
 	if err != nil {
-		return fmt.Errorf("ReadAccountData: %w", err)
+		return false, fmt.Errorf("ReadAccountData: %w", err)
 	}
 
 	if oldAcc.Incarnation > 0 {
@@ -144,18 +176,7 @@ func (cg *changesGetter) setAccountChangesFromV(v []byte) error {
 		}
 	}
 
-	// store the account
-	cg.accChanges[addr] = oldAcc
-
-	if oldAcc.CodeHash != currAcc.CodeHash {
-		hexcc, err := cg.getCodehashChanges(addr, oldAcc)
-		if err != nil {
-			return fmt.Errorf("getCodehashChanges: %w", err)
-		}
-		cg.codeChanges[addr] = hexcc
-	}
-
-	return nil
+	return oldAcc.CodeHash == currAcc.CodeHash, nil
 }
 
 func (cg *changesGetter) getCodehashChanges(addr common.Address, oldAcc *accounts.Account) (string, error) {
@@ -173,16 +194,24 @@ func (cg *changesGetter) getCodehashChanges(addr common.Address, oldAcc *account
 	return hexcc, nil
 }
 
-func (cg *changesGetter) setStorageChangesFromKv(sk, sv []byte) error {
+func (cg *changesGetter) setStorageChangesFromKv(sk, sv []byte) (err error) {
 	changesetKey := sk[length.BlockNum:]
-	address, _ := dbutils.PlainParseStoragePrefix(changesetKey)
+	address, incarnation := dbutils.PlainParseStoragePrefix(changesetKey)
 
 	sstorageKey := sv[:length.Hash]
 	stk := common.BytesToHash(sstorageKey)
 
-	value := []byte{0}
-	if len(sv[length.Hash:]) != 0 {
-		value = sv[length.Hash:]
+	var value []byte
+	if cg.deleter {
+		value = []byte{0}
+		if len(sv[length.Hash:]) != 0 {
+			value = sv[length.Hash:]
+		}
+	} else {
+		value, err = cg.psr.ReadAccountStorage(address, incarnation, &stk)
+		if err != nil {
+			return err
+		}
 	}
 
 	stkk := fmt.Sprintf("0x%032x", stk)
