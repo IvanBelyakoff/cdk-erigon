@@ -21,7 +21,14 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-func RegenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.RwTx, eridb *db2.EriDb, smtIn *smt.SMT, toBlock uint64) (common.Hash, error) {
+func RegenerateIntermediateHashes(
+	ctx context.Context,
+	logPrefix string,
+	db kv.RwTx,
+	eridb *db2.EriDb,
+	smtIn *smt.SMT,
+	toBlock uint64,
+) (common.Hash, error) {
 	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 
@@ -104,9 +111,8 @@ func RegenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 		return trie.EmptyRoot, err
 	}
 
-	err2 := db.ClearBucket("HermezSmtAccountValues")
-	if err2 != nil {
-		log.Warn(fmt.Sprint("regenerate SaveStageProgress to zero error: ", err2))
+	if err := db.ClearBucket("HermezSmtAccountValues"); err != nil {
+		log.Warn(fmt.Sprint("regenerate SaveStageProgress to zero error: ", err))
 	}
 
 	root := smtIn.LastRoot()

@@ -183,7 +183,7 @@ func finaliseBlock(
 	}
 
 	// this is actually the interhashes stage
-	newRoot, err := zkSmt.IncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
+	newRoot, err := zkSmt.IncrementIntermediateHashes(batchContext.ctx, batchContext.logPrefix, batchContext.sdb.tx, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	if err != nil {
 		return nil, err
 	}
@@ -247,10 +247,10 @@ func finaliseBlock(
 		from = 0
 	}
 	to := newNum.Uint64() + 1
-	if err = stagedsync.PromoteHistory(batchContext.s.LogPrefix(), batchContext.sdb.tx, kv.AccountChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
+	if err = stagedsync.PromoteHistory(batchContext.logPrefix, batchContext.sdb.tx, kv.AccountChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
 		return nil, err
 	}
-	if err = stagedsync.PromoteHistory(batchContext.s.LogPrefix(), batchContext.sdb.tx, kv.StorageChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
+	if err = stagedsync.PromoteHistory(batchContext.logPrefix, batchContext.sdb.tx, kv.StorageChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
 		return nil, err
 	}
 

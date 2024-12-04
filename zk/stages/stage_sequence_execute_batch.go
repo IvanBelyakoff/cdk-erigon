@@ -66,7 +66,7 @@ func doCheckForBadBatch(batchContext *BatchContext, batchState *BatchState, this
 }
 
 func writeBadBatchDetails(batchContext *BatchContext, batchState *BatchState, blockNumber uint64) error {
-	log.Info(fmt.Sprintf("[%s] Skipping bad batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
+	log.Info(fmt.Sprintf("[%s] Skipping bad batch %d...", batchContext.logPrefix, batchState.batchNumber))
 	// store the fact that this batch was invalid during recovery - will be used for the stream later
 	if err := batchContext.sdb.hermezDb.WriteInvalidBatch(batchState.batchNumber); err != nil {
 		return err
@@ -100,7 +100,7 @@ func updateStreamAndCheckRollback(
 	infiniteLoop := func(batchNumber uint64) {
 		// this infinite loop will make the node to print the error once every minute therefore preventing it for creating new blocks
 		for {
-			log.Error(fmt.Sprintf("[%s] identified an invalid batch with number %d", batchContext.s.LogPrefix(), batchNumber))
+			log.Error(fmt.Sprintf("[%s] identified an invalid batch with number %d", batchContext.logPrefix, batchNumber))
 			time.Sleep(time.Minute)
 		}
 	}
@@ -150,7 +150,7 @@ func markForUnwind(
 		return fmt.Errorf("could not find header for block %d", verifierBundle.Request.GetLastBlockNumber())
 	}
 
-	log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", batchContext.s.LogPrefix()), "badBlock", verifierBundle.Request.GetLastBlockNumber(), "unwindTo", unwindTo, "root", unwindHeader.Root)
+	log.Warn(fmt.Sprintf("[%s] Block is invalid - rolling back", batchContext.logPrefix), "badBlock", verifierBundle.Request.GetLastBlockNumber(), "unwindTo", unwindTo, "root", unwindHeader.Root)
 
 	u.UnwindTo(unwindTo, stagedsync.BadBlock(unwindHeader.Hash(), fmt.Errorf("block %d is invalid", verifierBundle.Request.GetLastBlockNumber())))
 	return nil

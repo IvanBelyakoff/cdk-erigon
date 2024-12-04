@@ -115,7 +115,7 @@ func sequencingBatchStep(
 
 	var block *types.Block
 	runLoopBlocks := true
-	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
+	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s.LogPrefix(), sdb)
 	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.HasExecutors(), cfg.zk.L1SyncStartBlock > 0, cfg.txPool, resequenceBatchJob)
 	blockDataSizeChecker := NewBlockDataChecker(cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()))
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
@@ -629,7 +629,7 @@ func sequencingBatchStep(
 		if err != nil {
 			return err
 		}
-		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
+		cfg.legacyVerifier.StartAsyncVerification(batchContext.logPrefix, batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
 
 		// check for new responses from the verifier
 		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
@@ -663,7 +663,7 @@ func sequencingBatchStep(
 		return fmt.Errorf("writing plain state version: %w", err)
 	}
 
-	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
+	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.logPrefix, batchState.batchNumber))
 
 	return sdb.tx.Commit()
 }

@@ -17,7 +17,7 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 	blockNumber := request.GetLastBlockNumber()
 	blockNumbers := []uint64{blockNumber}
 
-	log.Info(fmt.Sprintf("[%s] identified an invalid batch, entering limbo", batchContext.s.LogPrefix()), "batch", request.BatchNumber)
+	log.Info(fmt.Sprintf("[%s] identified an invalid batch, entering limbo", batchContext.logPrefix), "batch", request.BatchNumber)
 
 	l1InfoTreeMinTimestamps := make(map[uint64]uint64)
 	if _, err := legacyVerifier.GetWholeBatchStreamBytes(request.BatchNumber, batchContext.sdb.tx, blockNumbers, batchContext.sdb.hermezDb.HermezDbReader, l1InfoTreeMinTimestamps, nil); err != nil {
@@ -67,7 +67,7 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 		hash := transaction.Hash()
 		limboBlock.AppendTransaction(buffer.Bytes(), streamBytes, hash, sender)
 
-		log.Info(fmt.Sprintf("[%s] adding transaction to limbo", batchContext.s.LogPrefix()), "hash", hash)
+		log.Info(fmt.Sprintf("[%s] adding transaction to limbo", batchContext.logPrefix), "hash", hash)
 	}
 
 	limboBlock.BlockTimestamp = block.Time()

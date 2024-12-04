@@ -29,7 +29,7 @@ func newSequencerBatchStreamWriter(batchContext *BatchContext, batchState *Batch
 		batchContext:   batchContext,
 		batchState:     batchState,
 		ctx:            batchContext.ctx,
-		logPrefix:      batchContext.s.LogPrefix(),
+		logPrefix:      batchContext.logPrefix,
 		legacyVerifier: batchContext.cfg.legacyVerifier,
 		sdb:            batchContext.sdb,
 		streamServer:   batchContext.cfg.dataStreamServer,
@@ -134,13 +134,13 @@ func alignExecutionToDatastream(batchContext *BatchContext, lastExecutedBlock ui
 			return false, err
 		}
 
-		log.Warn(fmt.Sprintf("[%s] Unwinding due to a datastream gap", batchContext.s.LogPrefix()), "streamHeight", lastDatastreamBlock, "sequencerHeight", lastExecutedBlock)
+		log.Warn(fmt.Sprintf("[%s] Unwinding due to a datastream gap", batchContext.logPrefix), "streamHeight", lastDatastreamBlock, "sequencerHeight", lastExecutedBlock)
 		u.UnwindTo(lastDatastreamBlock, stagedsync.BadBlock(block.Hash(), fmt.Errorf("received bad block")))
 		return true, nil
 	}
 
 	if lastExecutedBlock < lastDatastreamBlock {
-		panic(fmt.Errorf("[%s] Datastream is ahead of sequencer. Re-sequencing should have handled this case before even comming to this point", batchContext.s.LogPrefix()))
+		panic(fmt.Errorf("[%s] Datastream is ahead of sequencer. Re-sequencing should have handled this case before even comming to this point", batchContext.logPrefix))
 	}
 
 	return false, nil
@@ -154,7 +154,7 @@ func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, bat
 	if isLastEntryBatchEnd {
 		return nil
 	}
-	log.Warn(fmt.Sprintf("[%s] Last datastream's batch %d was not closed, closing it now...", batchContext.s.LogPrefix(), batchToClose))
+	log.Warn(fmt.Sprintf("[%s] Last datastream's batch %d was not closed, closing it now...", batchContext.logPrefix, batchToClose))
 	return finalizeLastBatchInDatastream(batchContext, batchToClose, blockToCloseAt)
 }
 

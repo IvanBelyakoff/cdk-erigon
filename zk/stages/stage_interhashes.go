@@ -67,9 +67,6 @@ func StageZkInterHashesCfg(
 func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context) (root common.Hash, err error) {
 	logPrefix := s.LogPrefix()
 
-	quit := ctx.Done()
-	_ = quit
-
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		var err error
@@ -117,7 +114,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 
 	if cfg.zk.SmtRegenerateInMemory {
 		log.Info(fmt.Sprintf("[%s] SMT using mapmutation", logPrefix))
-		eridb.OpenBatch(quit)
+		eridb.OpenBatch(ctx.Done())
 	} else {
 		log.Info(fmt.Sprintf("[%s] SMT not using mapmutation", logPrefix))
 	}
@@ -126,17 +123,15 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		if shouldIncrementBecauseOfAFlag {
 			log.Debug(fmt.Sprintf("[%s] IncrementTreeAlways true - incrementing tree", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
 		}
-		if root, err = zkSmt.IncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
-			return trie.EmptyRoot, err
-		}
+		root, err = zkSmt.IncrementIntermediateHashes(ctx, logPrefix, tx, smt, s.BlockNumber, to)
 	} else {
-		if root, err = zkSmt.RegenerateIntermediateHashes(ctx, logPrefix, tx, eridb, smt, to); err != nil {
-			return trie.EmptyRoot, err
-		}
+		root, err = zkSmt.RegenerateIntermediateHashes(ctx, logPrefix, tx, eridb, smt, to)
+	}
+	if err != nil {
+		return trie.EmptyRoot, err
 	}
 
 	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", root.Hex())
-
 	if cfg.checkRoot {
 		var syncHeadHeader *types.Header
 		if syncHeadHeader, err = cfg.blockReader.HeaderByNumber(ctx, tx, to); err != nil {
@@ -190,11 +185,8 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		log.Debug(fmt.Sprintf("[%s] Unwinding intermediate hashes", s.LogPrefix()), "from", s.BlockNumber, "to", u.UnwindPoint)
 	}
 
-	var expectedRootHash common.Hash
 	syncHeadHeader := rawdb.ReadHeaderByNumber(tx, u.UnwindPoint)
-	if err != nil {
-		return err
-	}
+	var expectedRootHash common.Hash
 	if syncHeadHeader == nil {
 		log.Warn("header not found for block number", "block", u.UnwindPoint)
 	} else {

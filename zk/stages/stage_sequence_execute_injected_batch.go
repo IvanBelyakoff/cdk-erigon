@@ -31,7 +31,7 @@ func processInjectedInitialBatch(
 	batchState *BatchState,
 ) error {
 	// set the block height for the fork we're running at to ensure contract interactions are correct
-	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, batchState.forkId, batchContext.cfg.chainConfig, batchContext.s.LogPrefix()); err != nil {
+	if err := utils.RecoverySetBlockConfigForks(injectedBatchBlockNumber, batchState.forkId, batchContext.cfg.chainConfig, batchContext.logPrefix); err != nil {
 		return err
 	}
 

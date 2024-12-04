@@ -24,16 +24,16 @@ type BatchContext struct {
 	ctx        context.Context
 	cfg        *SequenceBlockCfg
 	historyCfg *stagedsync.HistoryCfg
-	s          *stagedsync.StageState
+	logPrefix  string
 	sdb        *stageDb
 }
 
-func newBatchContext(ctx context.Context, cfg *SequenceBlockCfg, historyCfg *stagedsync.HistoryCfg, s *stagedsync.StageState, sdb *stageDb) *BatchContext {
+func newBatchContext(ctx context.Context, cfg *SequenceBlockCfg, historyCfg *stagedsync.HistoryCfg, logPrefix string, sdb *stageDb) *BatchContext {
 	return &BatchContext{
 		ctx:        ctx,
 		cfg:        cfg,
 		historyCfg: historyCfg,
-		s:          s,
+		logPrefix:  logPrefix,
 		sdb:        sdb,
 	}
 }
