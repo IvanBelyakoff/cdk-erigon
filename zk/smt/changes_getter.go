@@ -106,7 +106,11 @@ func (cg *changesGetter) getChangesForBlock(blockNum uint64) error {
 		return ErrNotOpened
 	}
 
-	cg.psr.SetBlockNr(blockNum)
+	psrBlockNum := blockNum + 1
+	if cg.deleter {
+		psrBlockNum = blockNum
+	}
+	cg.psr.SetBlockNr(psrBlockNum)
 	dupSortKey := dbutils.EncodeBlockNumber(blockNum)
 
 	// collect changes to accounts and code
