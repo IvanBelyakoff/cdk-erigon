@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
-var shouldCheckForExecutionAndDataStreamAlighment = true
+var shouldCheckForExecutionAndDataStreamAlignment = true
 
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
@@ -135,7 +136,7 @@ func sequencingBatchStep(
 		return sdb.tx.Commit()
 	}
 
-	if shouldCheckForExecutionAndDataStreamAlighment {
+	if shouldCheckForExecutionAndDataStreamAlignment {
 		// handle cases where the last batch wasn't committed to the data stream.
 		// this could occur because we're migrating from an RPC node to a sequencer
 		// or because the sequencer was restarted and not all processes completed (like waiting from remote executor)
@@ -154,11 +155,11 @@ func sequencingBatchStep(
 					// do not set shouldCheckForExecutionAndDataStreamAlighment=false because of the error
 					return err
 				}
-				shouldCheckForExecutionAndDataStreamAlighment = false
+				shouldCheckForExecutionAndDataStreamAlignment = false
 				return nil
 			}
 		}
-		shouldCheckForExecutionAndDataStreamAlighment = false
+		shouldCheckForExecutionAndDataStreamAlignment = false
 	}
 
 	needsUnwind, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt)
@@ -307,8 +308,14 @@ func sequencingBatchStep(
 			log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 		}
 
-	LOOP_TRANSACTIONS:
+		innerBreak := false
+		emptyBlockOverflow := false
+
+	OuterLoopTransactions:
 		for {
+			if innerBreak {
+				break
+			}
 			select {
 			case <-logTicker.C:
 				if !batchState.isAnyRecovery() {
@@ -316,7 +323,7 @@ func sequencingBatchStep(
 				}
 			case <-blockTicker.C:
 				if !batchState.isAnyRecovery() {
-					break LOOP_TRANSACTIONS
+					break OuterLoopTransactions
 				}
 			case <-batchTicker.C:
 				if !batchState.isAnyRecovery() {
@@ -380,7 +387,19 @@ func sequencingBatchStep(
 
 				badTxHashes := make([]common.Hash, 0)
 				minedTxHashes := make([]common.Hash, 0)
+
+			InnerLoopTransactions:
 				for i, transaction := range batchState.blockState.transactionsForInclusion {
+					// quick check if we should stop handling transactions
+					select {
+					case <-blockTicker.C:
+						if !batchState.isAnyRecovery() {
+							innerBreak = true
+							break InnerLoopTransactions
+						}
+					default:
+					}
+
 					txHash := transaction.Hash()
 					effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
 
@@ -414,12 +433,21 @@ func sequencingBatchStep(
 							continue
 						}
 
-						// if we have an error at this point something has gone wrong, either in the pool or otherwise
-						// to stop the pool growing and hampering further processing of good transactions here
-						// we mark it for being discarded
-						log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
-						badTxHashes = append(badTxHashes, txHash)
-						batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
+						if isOkKnownError(err) {
+							// if this is a known error that could be caused by some edge case coming from the pool we want to warn
+							// about it and continue on as normal but ensure we don't continue to keep trying to add this transaction
+							// to the block
+							log.Warn(fmt.Sprintf("[%s] known error adding transaction to block, skipping for now: %v", logPrefix, err),
+								"hash", txHash)
+							badTxHashes = append(badTxHashes, txHash)
+						} else {
+							// if we have an error at this point something has gone wrong, either in the pool or otherwise
+							// to stop the pool growing and hampering further processing of good transactions here
+							// we mark it for being discarded
+							log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
+							badTxHashes = append(badTxHashes, txHash)
+							batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
+						}
 					}
 
 					switch anyOverflow {
@@ -457,7 +485,10 @@ func sequencingBatchStep(
 								if batchState.reachedOverflowTransactionLimit() || cfg.zk.SealBatchImmediatelyOnOverflow {
 									log.Info(fmt.Sprintf("[%s] closing batch due to counters", logPrefix), "counters: ", batchState.overflowTransactions, "immediate", cfg.zk.SealBatchImmediatelyOnOverflow)
 									runLoopBlocks = false
-									break LOOP_TRANSACTIONS
+									if len(batchState.blockState.builtBlockElements.transactions) == 0 {
+										emptyBlockOverflow = true
+									}
+									break OuterLoopTransactions
 								}
 							}
 
@@ -474,7 +505,7 @@ func sequencingBatchStep(
 						}
 						log.Info(fmt.Sprintf("[%s] gas overflowed adding transaction to block", logPrefix), "block", blockNumber, "tx-hash", txHash)
 						runLoopBlocks = false
-						break LOOP_TRANSACTIONS
+						break OuterLoopTransactions
 					case overflowNone:
 					}
 
@@ -494,12 +525,12 @@ func sequencingBatchStep(
 					if len(batchState.blockState.transactionsForInclusion) == 0 {
 						// We need to jump to the next block here if there are no transactions in current block
 						batchState.resequenceBatchJob.UpdateLastProcessedTx(batchState.resequenceBatchJob.CurrentBlock().L2Blockhash)
-						break LOOP_TRANSACTIONS
+						break OuterLoopTransactions
 					}
 
 					if batchState.resequenceBatchJob.AtNewBlockBoundary() {
 						// We need to jump to the next block here if we are at the end of the current block
-						break LOOP_TRANSACTIONS
+						break OuterLoopTransactions
 					} else {
 						if cfg.zk.SequencerResequenceStrict {
 							return fmt.Errorf("strict mode enabled, but resequenced batch %d has transactions that overflowed counters or failed transactions", batchState.batchNumber)
@@ -533,22 +564,33 @@ func sequencingBatchStep(
 						log.Info(fmt.Sprintf("[%s] L1 recovery no more transactions to recover", logPrefix))
 					}
 
-					break LOOP_TRANSACTIONS
+					break OuterLoopTransactions
 				}
 
 				if batchState.isLimboRecovery() {
 					runLoopBlocks = false
-					break LOOP_TRANSACTIONS
+					break OuterLoopTransactions
 				}
 			}
+		}
+
+		// we do not want to commit this block if it has no transactions and we detected an overflow - essentially the batch is too
+		// full to get any more transactions in it and we don't want to commit an empty block
+		if emptyBlockOverflow {
+			log.Info(fmt.Sprintf("[%s] Block %d overflow detected with no transactions added, skipping block for next batch", logPrefix, blockNumber))
+			break
 		}
 
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
 			return err
 		}
 
-		cfg.txPool.RemoveMinedTransactions(batchState.blockState.builtBlockElements.txSlots)
-		cfg.txPool.RemoveMinedTransactions(batchState.blockState.transactionsToDiscard)
+		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, batchState.blockState.builtBlockElements.txSlots); err != nil {
+			return err
+		}
+		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, batchState.blockState.transactionsToDiscard); err != nil {
+			return err
+		}
 
 		if batchState.isLimboRecovery() {
 			stateRoot := block.Root()
@@ -631,4 +673,9 @@ func removeInclusionTransaction(orig []types.Transaction, index int) []types.Tra
 		return orig
 	}
 	return append(orig[:index], orig[index+1:]...)
+}
+
+func isOkKnownError(err error) bool {
+	return err == nil ||
+		errors.Is(err, core.ErrNonceTooHigh)
 }

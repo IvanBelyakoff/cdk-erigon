@@ -14,7 +14,8 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/smt/pkg/db"
-	mocks "github.com/ledgerwatch/erigon/zk/datastream/mocks"
+	"github.com/ledgerwatch/erigon/zk/datastream/mocks"
+
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
