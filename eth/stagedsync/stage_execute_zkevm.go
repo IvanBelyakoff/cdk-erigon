@@ -18,7 +18,6 @@ import (
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/consensus/misc"
-	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 
@@ -26,12 +25,8 @@ import (
 
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/core/vm"
-	"github.com/ledgerwatch/erigon/eth/calltracer"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/eth/tracers/logger"
 	rawdbZk "github.com/ledgerwatch/erigon/zk/rawdb"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
@@ -109,6 +104,24 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	logger.Start()
 	defer logger.Stop()
 
+	blockExecutor := &blockExecutor{
+		tx:                   tx,
+		batch:                batch,
+		blockReader:          cfg.blockReader,
+		accumulator:          cfg.accumulator,
+		engine:               cfg.engine,
+		vmConfig:             *cfg.vmConfig,
+		chainConfig:          cfg.chainConfig,
+		roHermezDb:           hermezDb,
+		stateStream:          stateStream,
+		initialCycle:         initialCycle,
+		nextStagesExpectData: nextStagesExpectData,
+		hostoryPruneTo:       cfg.prune.History.PruneTo(to),
+		receiptsPruneTo:      cfg.prune.Receipts.PruneTo(to),
+		callTracesPruneTo:    cfg.prune.CallTraces.PruneTo(to),
+		prevBlockRoot:        prevBlockRoot,
+	}
+
 	stageProgress := s.BlockNumber
 	var stoppedErr error
 Loop:
@@ -129,12 +142,7 @@ Loop:
 			break
 		}
 
-		// Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
-		writeChangeSets := nextStagesExpectData || blockNum > cfg.prune.History.PruneTo(to)
-		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
-		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
-
-		execRs, err := executeBlockZk(block, &prevBlockRoot, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb)
+		execRs, err := blockExecutor.executeBlock(block)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Warn(fmt.Sprintf("[%s] Execution failed", s.LogPrefix()), "block", blockNum, "hash", datastreamBlockHash.Hex(), "err", err)
@@ -162,7 +170,6 @@ Loop:
 		header.Bloom = execRs.Bloom
 		// don't move above header values setting - wrong hash will be calculated
 		prevBlockHash = header.Hash()
-		prevBlockRoot = header.Root
 		stageProgress = blockNum
 		currentStateGas = currentStateGas + header.GasUsed
 
@@ -403,73 +410,6 @@ func postExecuteCommitValues(
 	}
 
 	return nil
-}
-
-func executeBlockZk(
-	block *types.Block,
-	prevBlockRoot *common.Hash,
-	tx kv.RwTx,
-	batch kv.StatelessRwTx,
-	cfg ExecuteBlockCfg,
-	vmConfig vm.Config, // emit copy, because will modify it
-	writeChangesets bool,
-	writeReceipts bool,
-	writeCallTraces bool,
-	initialCycle bool,
-	stateStream bool,
-	roHermezDb state.ReadOnlyHermezDb,
-) (execRs *core.EphemeralExecResultZk, err error) {
-	blockNum := block.NumberU64()
-
-	stateReader, stateWriter, err := newStateReaderWriter(batch, tx, block, writeChangesets, cfg.accumulator, cfg.blockReader, stateStream)
-	if err != nil {
-		return nil, fmt.Errorf("newStateReaderWriter: %w", err)
-	}
-
-	// where the magic happens
-	getHeader := func(hash common.Hash, number uint64) *types.Header {
-		h, _ := cfg.blockReader.Header(context.Background(), tx, hash, number)
-		return h
-	}
-
-	getTracer := func(txIndex int, txHash common.Hash) (vm.EVMLogger, error) {
-		// return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
-		return logger.NewStructLogger(&logger.LogConfig{}), nil
-	}
-
-	callTracer := calltracer.NewCallTracer()
-	vmConfig.Debug = true
-	vmConfig.Tracer = callTracer
-
-	getHashFn := core.GetHashFn(block.Header(), getHeader)
-	if execRs, err = core.ExecuteBlockEphemerallyZk(cfg.chainConfig, &vmConfig, getHashFn, cfg.engine, block, stateReader, stateWriter, ChainReaderImpl{config: cfg.chainConfig, tx: tx, blockReader: cfg.blockReader}, getTracer, roHermezDb, prevBlockRoot); err != nil {
-		return nil, fmt.Errorf("ExecuteBlockEphemerallyZk: %w", err)
-	}
-
-	if writeReceipts {
-		if err := rawdb.AppendReceipts(tx, blockNum, execRs.Receipts); err != nil {
-			return nil, fmt.Errorf("AppendReceipts: %w", err)
-		}
-
-		stateSyncReceipt := execRs.StateSyncReceipt
-		if stateSyncReceipt != nil && stateSyncReceipt.Status == types.ReceiptStatusSuccessful {
-			if err := rawdb.WriteBorReceipt(tx, block.NumberU64(), stateSyncReceipt); err != nil {
-				return nil, fmt.Errorf("WriteBorReceipt: %w", err)
-			}
-		}
-	}
-
-	if cfg.changeSetHook != nil {
-		if hasChangeSet, ok := stateWriter.(HasChangeSetWriter); ok {
-			cfg.changeSetHook(blockNum, hasChangeSet.ChangeSetWriter())
-		}
-	}
-	if writeCallTraces {
-		if err := callTracer.WriteToDb(tx, block, *cfg.vmConfig); err != nil {
-			return nil, fmt.Errorf("WriteToDb: %w", err)
-		}
-	}
-	return execRs, nil
 }
 
 func UnwindExecutionStageZk(u *UnwindState, s *StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) (err error) {
