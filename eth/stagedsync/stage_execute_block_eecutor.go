@@ -107,7 +107,7 @@ func (be *blockExecutor) SetNewTx(tx kv.RwTx, batch kv.StatelessRwTx) {
 }
 
 func (be *blockExecutor) GetProgress() uint64 {
-	if be.block == nil {
+	if be.block != nil {
 		return be.block.NumberU64()
 	}
 
