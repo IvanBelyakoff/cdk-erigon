@@ -41,10 +41,13 @@ type blockExecutor struct {
 	nextStagesExpectData bool
 
 	// set internelly
-	hermezDb    hermezDb
-	stateStream bool
-	getHeader   func(hash common.Hash, number uint64) *types.Header
-	getTracer   func(txIndex int, txHash common.Hash) (vm.EVMLogger, error)
+	hermezDb          hermezDb
+	stateStream       bool
+	getHeader         func(hash common.Hash, number uint64) *types.Header
+	getTracer         func(txIndex int, txHash common.Hash) (vm.EVMLogger, error)
+	historyPruneTo    uint64
+	receiptsPruneTo   uint64
+	callTracesPruneTo uint64
 
 	// these change on each block
 	prevBlockRoot       common.Hash
@@ -95,6 +98,10 @@ func (be *blockExecutor) Innit(from, to uint64) (err error) {
 		// return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
 		return logger.NewStructLogger(&logger.LogConfig{}), nil
 	}
+
+	be.historyPruneTo = be.cfg.prune.History.PruneTo(to)
+	be.receiptsPruneTo = be.cfg.prune.Receipts.PruneTo(to)
+	be.callTracesPruneTo = be.cfg.prune.CallTraces.PruneTo(to)
 
 	return nil
 }
@@ -178,9 +185,9 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 	blockNum := block.NumberU64()
 
 	// Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
-	writeChangeSets := be.nextStagesExpectData || blockNum > be.cfg.prune.History.PruneTo(to)
-	writeReceipts := be.nextStagesExpectData || blockNum > be.cfg.prune.Receipts.PruneTo(to)
-	writeCallTraces := be.nextStagesExpectData || blockNum > be.cfg.prune.CallTraces.PruneTo(to)
+	writeChangeSets := be.nextStagesExpectData || blockNum > be.historyPruneTo
+	writeReceipts := be.nextStagesExpectData || blockNum > be.receiptsPruneTo
+	writeCallTraces := be.nextStagesExpectData || blockNum > be.callTracesPruneTo
 
 	stateReader, stateWriter, err := newStateReaderWriter(
 		be.batch,
