@@ -43,12 +43,15 @@ type blockExecutor struct {
 	// set internelly
 	hermezDb    hermezDb
 	stateStream bool
+	getHeader   func(hash common.Hash, number uint64) *types.Header
+	getTracer   func(txIndex int, txHash common.Hash) (vm.EVMLogger, error)
 
 	// these change on each block
 	prevBlockRoot       common.Hash
 	prevBlockHash       common.Hash
 	datastreamBlockHash common.Hash
 	block               *types.Block
+	from                uint64
 	currentStateGas     uint64
 }
 
@@ -74,11 +77,23 @@ func NewBlockExecutor(
 }
 
 func (be *blockExecutor) Innit(from, to uint64) (err error) {
+	be.from = from
 	be.stateStream = !be.initialCycle && be.cfg.stateStream && to-from < stateStreamLimit
 
 	be.prevBlockRoot, be.prevBlockHash, err = be.getBlockHashValues(from)
 	if err != nil {
 		return fmt.Errorf("getBlockHashValues: %w", err)
+	}
+
+	// where the magic happens
+	be.getHeader = func(hash common.Hash, number uint64) *types.Header {
+		h, _ := be.cfg.blockReader.Header(context.Background(), be.tx, hash, number)
+		return h
+	}
+
+	be.getTracer = func(txIndex int, txHash common.Hash) (vm.EVMLogger, error) {
+		// return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
+		return logger.NewStructLogger(&logger.LogConfig{}), nil
 	}
 
 	return nil
@@ -89,6 +104,14 @@ func (be *blockExecutor) SetNewTx(tx kv.RwTx, batch kv.StatelessRwTx) {
 	be.batch = batch
 
 	be.hermezDb = hermez_db.NewHermezDb(tx)
+}
+
+func (be *blockExecutor) GetProgress() uint64 {
+	if be.block == nil {
+		return be.block.NumberU64()
+	}
+
+	return be.from
 }
 
 func (be *blockExecutor) ExecuteBlock(blockNum, to uint64) error {
@@ -159,27 +182,24 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 	writeReceipts := be.nextStagesExpectData || blockNum > be.cfg.prune.Receipts.PruneTo(to)
 	writeCallTraces := be.nextStagesExpectData || blockNum > be.cfg.prune.CallTraces.PruneTo(to)
 
-	stateReader, stateWriter, err := newStateReaderWriter(be.batch, be.tx, block, writeChangeSets, be.cfg.accumulator, be.cfg.blockReader, be.stateStream)
+	stateReader, stateWriter, err := newStateReaderWriter(
+		be.batch,
+		be.tx,
+		block,
+		writeChangeSets,
+		be.cfg.accumulator,
+		be.cfg.blockReader,
+		be.stateStream,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("newStateReaderWriter: %w", err)
-	}
-
-	// where the magic happens
-	getHeader := func(hash common.Hash, number uint64) *types.Header {
-		h, _ := be.cfg.blockReader.Header(context.Background(), be.tx, hash, number)
-		return h
-	}
-
-	getTracer := func(txIndex int, txHash common.Hash) (vm.EVMLogger, error) {
-		// return logger.NewJSONFileLogger(&logger.LogConfig{}, txHash.String()), nil
-		return logger.NewStructLogger(&logger.LogConfig{}), nil
 	}
 
 	callTracer := calltracer.NewCallTracer()
 	be.cfg.vmConfig.Debug = true
 	be.cfg.vmConfig.Tracer = callTracer
 
-	getHashFn := core.GetHashFn(block.Header(), getHeader)
+	getHashFn := core.GetHashFn(block.Header(), be.getHeader)
 	if execRs, err = core.ExecuteBlockEphemerallyZk(
 		be.cfg.chainConfig,
 		be.cfg.vmConfig,
@@ -193,7 +213,7 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 			tx:          be.tx,
 			blockReader: be.cfg.blockReader,
 		},
-		getTracer,
+		be.getTracer,
 		be.hermezDb,
 		&be.prevBlockRoot,
 	); err != nil {

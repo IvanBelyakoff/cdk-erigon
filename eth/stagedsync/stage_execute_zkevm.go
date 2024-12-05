@@ -28,7 +28,15 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
-func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock uint64, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) (err error) {
+func SpawnExecuteBlocksStageZk(
+	s *StageState,
+	u Unwinder,
+	tx kv.RwTx,
+	toBlock uint64,
+	ctx context.Context,
+	cfg ExecuteBlockCfg,
+	initialCycle bool,
+) (err error) {
 	if cfg.historyV3 {
 		if err = ExecBlockV3(s, u, wrap.TxContainer{Tx: tx}, toBlock, ctx, cfg, initialCycle, log.New()); err != nil {
 			return fmt.Errorf("ExecBlockV3: %w", err)
@@ -77,7 +85,16 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 
 	// Transform batch_size limit into Ggas
 	gasState := uint64(cfg.batchSize) * uint64(datasize.KB) * 2
-	logger := utils.NewTxGasLogger(logInterval, s.BlockNumber, total, gasState, s.LogPrefix(), &batch, tx, stages.SyncMetrics[stages.Execution])
+	logger := utils.NewTxGasLogger(
+		logInterval,
+		s.BlockNumber,
+		total,
+		gasState,
+		s.LogPrefix(),
+		&batch,
+		tx,
+		stages.SyncMetrics[stages.Execution],
+	)
 	logger.Start()
 	defer logger.Stop()
 
@@ -85,7 +102,6 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	if err != nil {
 		return fmt.Errorf("getStageProgress: %w", err)
 	}
-	nextStagesExpectData := nextStageProgress > 0 // Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
 
 	blockExecutor := NewBlockExecutor(
 		ctx,
@@ -94,7 +110,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 		tx,
 		batch,
 		initialCycle,
-		nextStagesExpectData,
+		nextStageProgress > 0, // Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
 	)
 	blockExecutor.Innit(s.BlockNumber, to)
 
@@ -119,13 +135,18 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 			break
 		}
 
-		logger.AddBlock(uint64(blockExecutor.block.Transactions().Len()), blockExecutor.block.NumberU64(), blockExecutor.currentStateGas, blockNum)
+		logger.AddBlock(
+			uint64(blockExecutor.block.Transactions().Len()),
+			blockExecutor.GetProgress(),
+			blockExecutor.currentStateGas,
+			blockNum,
+		)
 
 		// should update progress
 		if batch.BatchSize() >= int(cfg.batchSize) {
 			log.Info("Committed State", "gas reached", blockExecutor.currentStateGas, "gasTarget", gasState)
 			blockExecutor.currentStateGas = 0
-			if err = s.Update(batch, blockExecutor.block.NumberU64()); err != nil {
+			if err = s.Update(batch, blockExecutor.GetProgress()); err != nil {
 				return fmt.Errorf("s.Update: %w", err)
 			}
 			if err = batch.Flush(ctx, tx); err != nil {
@@ -148,13 +169,13 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 		}
 	}
 
-	if err = s.Update(batch, blockExecutor.block.NumberU64()); err != nil {
+	if err = s.Update(batch, blockExecutor.GetProgress()); err != nil {
 		return fmt.Errorf("s.Update: %w", err)
 	}
 
 	// we need to artificially update the headers stage here as well to ensure that notifications
 	// can fire at the end of the stage loop and inform RPC subscriptions of new blocks for example
-	if err = stages.SaveStageProgress(tx, stages.Headers, blockExecutor.block.NumberU64()); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.Headers, blockExecutor.GetProgress()); err != nil {
 		return fmt.Errorf("SaveStageProgress: %w", err)
 	}
 
@@ -163,19 +184,19 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	}
 
 	// stageProgress is latest processsed block number
-	if _, err = rawdb.IncrementStateVersionByBlockNumberIfNeeded(tx, blockExecutor.block.NumberU64()); err != nil {
+	if _, err = rawdb.IncrementStateVersionByBlockNumberIfNeeded(tx, blockExecutor.GetProgress()); err != nil {
 		return fmt.Errorf("IncrementStateVersionByBlockNumberIfNeeded: %w", err)
 	}
 
 	if !useExternalTx {
-		log.Info(fmt.Sprintf("[%s] Commiting DB transaction...", s.LogPrefix()), "block", blockExecutor.block.NumberU64())
+		log.Info(fmt.Sprintf("[%s] Commiting DB transaction...", s.LogPrefix()), "block", blockExecutor.GetProgress())
 
 		if err = tx.Commit(); err != nil {
 			return fmt.Errorf("tx.Commit: %w", err)
 		}
 	}
 
-	log.Info(fmt.Sprintf("[%s] Completed on", s.LogPrefix()), "block", blockExecutor.block.NumberU64())
+	log.Info(fmt.Sprintf("[%s] Completed on", s.LogPrefix()), "block", blockExecutor.GetProgress())
 
 	return stoppedErr
 }
@@ -223,7 +244,14 @@ func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64
 	return to, total, nil
 }
 
-func UnwindExecutionStageZk(u *UnwindState, s *StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool) (err error) {
+func UnwindExecutionStageZk(
+	u *UnwindState,
+	s *StageState,
+	tx kv.RwTx,
+	ctx context.Context,
+	cfg ExecuteBlockCfg,
+	initialCycle bool,
+) (err error) {
 	if u.UnwindPoint >= s.BlockNumber {
 		return nil
 	}
@@ -261,7 +289,15 @@ func UnwindExecutionStageZk(u *UnwindState, s *StageState, tx kv.RwTx, ctx conte
 	return nil
 }
 
-func UnwindExecutionStageErigon(u *UnwindState, s *StageState, tx kv.RwTx, ctx context.Context, cfg ExecuteBlockCfg, initialCycle bool, logger log.Logger) error {
+func UnwindExecutionStageErigon(
+	u *UnwindState,
+	s *StageState,
+	tx kv.RwTx,
+	ctx context.Context,
+	cfg ExecuteBlockCfg,
+	initialCycle bool,
+	logger log.Logger,
+) error {
 	return unwindExecutionStage(u, s, wrap.TxContainer{Tx: tx}, ctx, cfg, initialCycle, logger)
 }
 
