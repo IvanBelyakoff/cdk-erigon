@@ -85,6 +85,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	if err != nil {
 		return fmt.Errorf("getStageProgress: %w", err)
 	}
+	nextStagesExpectData := nextStageProgress > 0 // Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
 
 	blockExecutor := NewBlockExecutor(
 		ctx,
@@ -93,7 +94,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 		tx,
 		batch,
 		initialCycle,
-		nextStageProgress > 0, // Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
+		nextStagesExpectData,
 	)
 	blockExecutor.Innit(s.BlockNumber, to)
 
