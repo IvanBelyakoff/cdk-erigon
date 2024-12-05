@@ -112,7 +112,7 @@ func SpawnExecuteBlocksStageZk(
 		initialCycle,
 		nextStageProgress > 0, // Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
 	)
-	blockExecutor.Innit(s.BlockNumber, to)
+	blockExecutor.Init(s.BlockNumber, to)
 
 	var stoppedErr error
 
@@ -126,7 +126,7 @@ func SpawnExecuteBlocksStageZk(
 			break
 		}
 
-		if err := blockExecutor.ExecuteBlock(blockNum, to); err != nil {
+		if err := blockExecutor.ExecuteBlock(blockNum); err != nil {
 			if !errors.Is(err, ErrExecutionError) {
 				return fmt.Errorf("executeBlock: %w", err)
 			}

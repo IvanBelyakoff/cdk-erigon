@@ -48,13 +48,14 @@ type blockExecutor struct {
 	historyPruneTo    uint64
 	receiptsPruneTo   uint64
 	callTracesPruneTo uint64
+	from              uint64
 
 	// these change on each block
 	prevBlockRoot       common.Hash
 	prevBlockHash       common.Hash
 	datastreamBlockHash common.Hash
 	block               *types.Block
-	from                uint64
+	senders             []common.Address
 	currentStateGas     uint64
 }
 
@@ -79,7 +80,7 @@ func NewBlockExecutor(
 	}
 }
 
-func (be *blockExecutor) Innit(from, to uint64) (err error) {
+func (be *blockExecutor) Init(from, to uint64) (err error) {
 	be.from = from
 	be.stateStream = !be.initialCycle && be.cfg.stateStream && to-from < stateStreamLimit
 
@@ -121,21 +122,18 @@ func (be *blockExecutor) GetProgress() uint64 {
 	return be.from
 }
 
-func (be *blockExecutor) ExecuteBlock(blockNum, to uint64) error {
+func (be *blockExecutor) ExecuteBlock(blockNum uint64) error {
 	//fetch values pre execute
-	datastreamBlockHash, block, senders, err := be.getPreexecuteValues(blockNum)
-	if err != nil {
+	if err := be.getPreexecuteValues(blockNum); err != nil {
 		return fmt.Errorf("getPreexecuteValues: %w", err)
 	}
-	be.datastreamBlockHash = datastreamBlockHash
-	be.block = block
 
-	execRs, err := be.executeBlock(block, to)
+	execRs, err := be.executeBlock()
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			log.Warn(fmt.Sprintf("[%s] Execution failed", be.logPrefix), "block", blockNum, "hash", be.datastreamBlockHash.Hex(), "err", err)
 			if be.cfg.hd != nil {
-				be.cfg.hd.ReportBadHeaderPoS(be.datastreamBlockHash, block.ParentHash())
+				be.cfg.hd.ReportBadHeaderPoS(be.datastreamBlockHash, be.block.ParentHash())
 			}
 			if be.cfg.badBlockHalt {
 				return fmt.Errorf("executeBlockZk: %w", err)
@@ -151,17 +149,17 @@ func (be *blockExecutor) ExecuteBlock(blockNum, to uint64) error {
 	}
 
 	// exec loop variables
-	header := block.HeaderNoCopy()
+	header := be.block.HeaderNoCopy()
 	header.GasUsed = uint64(execRs.GasUsed)
 	header.ReceiptHash = types.DeriveSha(execRs.Receipts)
 	header.Bloom = execRs.Bloom
 	// do not move bove the header setting - hash will differ
-	be.prevBlockRoot = block.Root()
+	be.prevBlockRoot = be.block.Root()
 	be.prevBlockHash = header.Hash()
 	be.currentStateGas = be.currentStateGas + header.GasUsed
 
 	//commit values post execute
-	if err := be.postExecuteCommitValues(block, senders); err != nil {
+	if err := be.postExecuteCommitValues(); err != nil {
 		return fmt.Errorf("postExecuteCommitValues: %w", err)
 	}
 
@@ -181,8 +179,8 @@ func (be *blockExecutor) getBlockHashValues(number uint64) (common.Hash, common.
 	return header.Root, prevheaderHash, nil
 }
 
-func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *core.EphemeralExecResultZk, err error) {
-	blockNum := block.NumberU64()
+func (be *blockExecutor) executeBlock() (execRs *core.EphemeralExecResultZk, err error) {
+	blockNum := be.block.NumberU64()
 
 	// Incremental move of next stages depend on fully written ChangeSets, Receipts, CallTraceSet
 	writeChangeSets := be.nextStagesExpectData || blockNum > be.historyPruneTo
@@ -192,7 +190,7 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 	stateReader, stateWriter, err := newStateReaderWriter(
 		be.batch,
 		be.tx,
-		block,
+		be.block,
 		writeChangeSets,
 		be.cfg.accumulator,
 		be.cfg.blockReader,
@@ -206,13 +204,13 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 	be.cfg.vmConfig.Debug = true
 	be.cfg.vmConfig.Tracer = callTracer
 
-	getHashFn := core.GetHashFn(block.Header(), be.getHeader)
+	getHashFn := core.GetHashFn(be.block.Header(), be.getHeader)
 	if execRs, err = core.ExecuteBlockEphemerallyZk(
 		be.cfg.chainConfig,
 		be.cfg.vmConfig,
 		getHashFn,
 		be.cfg.engine,
-		block,
+		be.block,
 		stateReader,
 		stateWriter,
 		ChainReaderImpl{
@@ -234,7 +232,7 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 
 		stateSyncReceipt := execRs.StateSyncReceipt
 		if stateSyncReceipt != nil && stateSyncReceipt.Status == types.ReceiptStatusSuccessful {
-			if err := rawdb.WriteBorReceipt(be.tx, block.NumberU64(), stateSyncReceipt); err != nil {
+			if err := rawdb.WriteBorReceipt(be.tx, blockNum, stateSyncReceipt); err != nil {
 				return nil, fmt.Errorf("WriteBorReceipt: %w", err)
 			}
 		}
@@ -246,7 +244,7 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 		}
 	}
 	if writeCallTraces {
-		if err := callTracer.WriteToDb(be.tx, block, *be.cfg.vmConfig); err != nil {
+		if err := callTracer.WriteToDb(be.tx, be.block, *be.cfg.vmConfig); err != nil {
 			return nil, fmt.Errorf("WriteToDb: %w", err)
 		}
 	}
@@ -255,19 +253,19 @@ func (be *blockExecutor) executeBlock(block *types.Block, to uint64) (execRs *co
 }
 
 // gets the pre-execute values for a block and sets the previous block hash
-func (be *blockExecutor) getPreexecuteValues(blockNum uint64) (common.Hash, *types.Block, []common.Address, error) {
+func (be *blockExecutor) getPreexecuteValues(blockNum uint64) error {
 	preExecuteHeaderHash, err := rawdb.ReadCanonicalHash(be.tx, blockNum)
 	if err != nil {
-		return common.Hash{}, nil, nil, fmt.Errorf("ReadCanonicalHash: %w", err)
+		return fmt.Errorf("ReadCanonicalHash: %w", err)
 	}
 
 	block, senders, err := be.cfg.blockReader.BlockWithSenders(be.ctx, be.tx, preExecuteHeaderHash, blockNum)
 	if err != nil {
-		return common.Hash{}, nil, nil, fmt.Errorf("BlockWithSenders: %w", err)
+		return fmt.Errorf("BlockWithSenders: %w", err)
 	}
 
 	if block == nil {
-		return common.Hash{}, nil, nil, fmt.Errorf("empty block blocknum: %d", blockNum)
+		return fmt.Errorf("empty block blocknum: %d", blockNum)
 	}
 
 	block.HeaderNoCopy().ParentHash = be.prevBlockHash
@@ -275,21 +273,22 @@ func (be *blockExecutor) getPreexecuteValues(blockNum uint64) (common.Hash, *typ
 	if be.cfg.chainConfig.IsLondon(blockNum) {
 		parentHeader, err := be.cfg.blockReader.Header(be.ctx, be.tx, be.prevBlockHash, blockNum-1)
 		if err != nil {
-			return common.Hash{}, nil, nil, fmt.Errorf("cfg.blockReader.Header: %w", err)
+			return fmt.Errorf("cfg.blockReader.Header: %w", err)
 		}
 		block.HeaderNoCopy().BaseFee = misc.CalcBaseFeeZk(be.cfg.chainConfig, parentHeader)
 	}
 
-	return preExecuteHeaderHash, block, senders, nil
+	be.datastreamBlockHash = preExecuteHeaderHash
+	be.block = block
+	be.senders = senders
+
+	return nil
 }
 
-func (be *blockExecutor) postExecuteCommitValues(
-	block *types.Block,
-	senders []common.Address,
-) error {
-	header := block.Header()
+func (be *blockExecutor) postExecuteCommitValues() error {
+	header := be.block.Header()
 	blockHash := header.Hash()
-	blockNum := block.NumberU64()
+	blockNum := be.block.NumberU64()
 
 	// if datastream hash was wrong, remove old data
 	if blockHash != be.datastreamBlockHash {
@@ -316,14 +315,14 @@ func (be *blockExecutor) postExecuteCommitValues(
 		if err := rawdb.DeleteBodyAndTransactions(be.tx, blockNum, be.datastreamBlockHash); err != nil {
 			return fmt.Errorf("DeleteBodyAndTransactions: %w", err)
 		}
-		if err := rawdb.WriteBodyAndTransactions(be.tx, blockHash, blockNum, block.Transactions(), bodyForStorage); err != nil {
+		if err := rawdb.WriteBodyAndTransactions(be.tx, blockHash, blockNum, be.block.Transactions(), bodyForStorage); err != nil {
 			return fmt.Errorf("WriteBodyAndTransactions: %w", err)
 		}
 
 		// [zkevm] senders were saved in stage_senders for headerHashes based on incomplete headers
 		// in stage execute we complete the headers and senders should be moved to the correct headerHash
 		// also we should delete other data based on the old hash, since it is unaccessable now
-		if err := rawdb.WriteSenders(be.tx, blockHash, blockNum, senders); err != nil {
+		if err := rawdb.WriteSenders(be.tx, blockHash, blockNum, be.senders); err != nil {
 			return fmt.Errorf("failed to write senders: %w", err)
 		}
 	}
@@ -359,7 +358,7 @@ func (be *blockExecutor) postExecuteCommitValues(
 	}
 
 	// write the new block lookup entries
-	if err := rawdb.WriteTxLookupEntries_zkEvm(be.tx, block); err != nil {
+	if err := rawdb.WriteTxLookupEntries_zkEvm(be.tx, be.block); err != nil {
 		return fmt.Errorf("WriteTxLookupEntries_zkEvm: %w", err)
 	}
 
