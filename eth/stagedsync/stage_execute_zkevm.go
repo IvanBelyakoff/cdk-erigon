@@ -83,7 +83,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	}()
 
 	hermezDb := hermez_db.NewHermezDb(tx)
-	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, hermezDb, s.LogPrefix()); err != nil {
+	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, hermezDb, s.LogPrefix(), cfg.zk.LogLevel.IsTraceLogLevelSet()); err != nil {
 		return err
 	}
 

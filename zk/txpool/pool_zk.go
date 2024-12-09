@@ -31,6 +31,12 @@ func calcProtocolBaseFee(baseFee uint64) uint64 {
 	return 0
 }
 
+func (p *TxPool) Trace(msg string, ctx ...interface{}) {
+	if p.logLevel.IsTraceLogLevelSet() {
+		log.Trace(msg, ctx...)
+	}
+}
+
 // onSenderStateChange is the function that recalculates ephemeral fields of transactions and determines
 // which sub pool they will need to go to. Sice this depends on other transactions from the same sender by with lower
 // nonces, and also affect other transactions from the same sender with higher nonce, it loops through all transactions

@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"strings"
+
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/chain"
@@ -84,7 +86,7 @@ type DbReader interface {
 	GetHighestBlockInBatch(batchNo uint64) (uint64, error)
 }
 
-func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix string) error {
+func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix string, shouldPrintTrace bool) error {
 	var lastSetBlockNum uint64 = 0
 	var foundAny bool = false
 
@@ -102,10 +104,14 @@ func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix st
 			lastSetBlockNum = blockNum
 			foundAny = true
 		} else if !foundAny {
-			log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v and no previous block number set", logPrefix, forkId))
+			if shouldPrintTrace {
+				log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v and no previous block number set", logPrefix, forkId))
+			}
 			continue
 		} else {
-			log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v, using last set block number: %v", logPrefix, forkId, lastSetBlockNum))
+			if shouldPrintTrace {
+				log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v, using last set block number: %v", logPrefix, forkId, lastSetBlockNum))
+			}
 		}
 
 		if err := cfg.SetForkIdBlock(forkId, lastSetBlockNum); err != nil {
@@ -156,4 +162,14 @@ func GetBatchLocalExitRootFromSCStorageByBlock(blockNumber uint64, db DbReader, 
 	}
 
 	return libcommon.Hash{}, nil
+}
+
+type LogLevel string
+
+// function to check if log level is trace
+func (ll *LogLevel) IsTraceLogLevelSet() bool {
+	if ll == nil {
+		return false
+	}
+	return strings.ToLower(string(*ll)) == "trace"
 }

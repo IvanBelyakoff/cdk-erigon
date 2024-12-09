@@ -103,7 +103,7 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 			cfg := NewTestConfig()
 			reader := &SimpleForkReader{BatchForks: scenario.batchForks, LowestBlocks: scenario.lowestBlocks}
 
-			err := UpdateZkEVMBlockCfg(cfg, reader, "TestPrefix")
+			err := UpdateZkEVMBlockCfg(cfg, reader, "TestPrefix", false)
 			assert.NoError(t, err, "should not return an error")
 
 			assert.Equal(t, scenario.expectedCalls, cfg.setCalls, "SetForkIdBlock calls mismatch")

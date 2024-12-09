@@ -103,7 +103,7 @@ func SpawnSequencingStage(
 
 	tryHaltSequencer(batchContext, batchState.batchNumber)
 
-	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
+	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix, cfg.zk.LogLevel.IsTraceLogLevelSet()); err != nil {
 		return err
 	}
 

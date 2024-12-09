@@ -5,6 +5,7 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 type Zk struct {
@@ -89,6 +90,7 @@ type Zk struct {
 	MockWitnessGeneration          bool
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
+	LogLevel                       utils.LogLevel
 }
 
 var DefaultZkConfig = &Zk{}
