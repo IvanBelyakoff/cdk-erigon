@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"strings"
 
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
@@ -162,14 +161,4 @@ func GetBatchLocalExitRootFromSCStorageByBlock(blockNumber uint64, db DbReader, 
 	}
 
 	return libcommon.Hash{}, nil
-}
-
-type LogLevel string
-
-// function to check if log level is trace
-func (ll *LogLevel) IsTraceLogLevelSet() bool {
-	if ll == nil {
-		return false
-	}
-	return strings.ToLower(string(*ll)) == "trace"
 }

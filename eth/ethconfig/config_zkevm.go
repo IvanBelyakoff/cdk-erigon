@@ -1,11 +1,11 @@
 package ethconfig
 
 import (
+	"strings"
 	"time"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/gateway-fm/cdk-erigon-lib/common"
-	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 type Zk struct {
@@ -90,7 +90,7 @@ type Zk struct {
 	MockWitnessGeneration          bool
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
-	LogLevel                       utils.LogLevel
+	LogLevel                       LogLevel
 }
 
 var DefaultZkConfig = &Zk{}
@@ -101,4 +101,14 @@ func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
 
 func (c *Zk) HasExecutors() bool {
 	return len(c.ExecutorUrls) > 0 && c.ExecutorUrls[0] != ""
+}
+
+type LogLevel string
+
+// function to check if log level is trace
+func (ll *LogLevel) IsTraceLogLevelSet() bool {
+	if ll == nil {
+		return false
+	}
+	return strings.ToLower(string(*ll)) == "trace"
 }

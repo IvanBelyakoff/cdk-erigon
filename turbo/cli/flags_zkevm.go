@@ -201,7 +201,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		MockWitnessGeneration:          ctx.Bool(utils.MockWitnessGeneration.Name),
 		RejectLowGasPriceTransactions:  ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
 		RejectLowGasPriceTolerance:     ctx.Float64(utils.RejectLowGasPriceTolerance.Name),
-		LogLevel:                       utils2.LogLevel(logLevel),
+		LogLevel:                       ethconfig.LogLevel(logLevel),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

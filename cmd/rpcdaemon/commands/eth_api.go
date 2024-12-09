@@ -131,7 +131,7 @@ type BaseAPI struct {
 	dirs           datadir.Dirs
 	l2RpcUrl       string
 	gasless        bool
-	logLevel       utils.LogLevel
+	logLevel       ethconfig.LogLevel
 }
 
 func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.AggregatorV3, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs) *BaseAPI {
@@ -360,7 +360,7 @@ type APIImpl struct {
 	VirtualCountersSmtReduction   float64
 	RejectLowGasPriceTransactions bool
 	RejectLowGasPriceTolerance    float64
-	logLevel                      utils.LogLevel
+	logLevel                      ethconfig.LogLevel
 }
 
 // NewEthAPI returns APIImpl instance
