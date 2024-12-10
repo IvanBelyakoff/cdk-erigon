@@ -5,6 +5,7 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 type Zk struct {
@@ -62,6 +63,8 @@ type Zk struct {
 	DefaultGasPrice                        uint64
 	MaxGasPrice                            uint64
 	GasPriceFactor                         float64
+	GasPriceCheckFrequency                 time.Duration
+	GasPriceHistoryCount                   uint64
 	DAUrl                                  string
 	DataStreamHost                         string
 	DataStreamPort                         uint
@@ -98,6 +101,9 @@ type Zk struct {
 	WitnessCacheEnabled            bool
 	WitnessCacheLimit              uint64
 	WitnessContractInclusion       []common.Address
+	RejectLowGasPriceTransactions  bool
+	RejectLowGasPriceTolerance     float64
+	LogLevel                       utils.LogLevel
 }
 
 var DefaultZkConfig = &Zk{}
