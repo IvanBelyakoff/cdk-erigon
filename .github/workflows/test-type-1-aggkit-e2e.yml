@@ -3,6 +3,9 @@
 name: Bats E2E Tests Type 1 aggkit bridge
 
 on:
+  push:
+    branches:
+      - project/pp2
   pull_request:
     branches:
       - project/pp2
