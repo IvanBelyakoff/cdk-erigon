@@ -4,12 +4,12 @@ on:
     branches:
       - zkevm
       - stable/**
-      - project/**
+      # - project/**
   pull_request:
     branches:
       - zkevm
       - stable/**
-      - project/**
+      # - project/**
     types:
       - opened
       - reopened
