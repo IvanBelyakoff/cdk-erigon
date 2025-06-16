@@ -121,8 +121,7 @@ jobs:
               echo '${{ inputs.kurtosis-cdk-args }}' | tee /tmp/kurtosis-args.json
               exit
           fi
-          echo '${{ inputs.kurtosis-cdk-args }}'
-          echo '${{ inputs.kurtosis-cdk-args }}' | jq --arg img '${{ inputs.docker-image-override }}' --arg tag '${{ inputs.docker-tag }}' '.args[$img] = $tag' | tee /tmp/kurtosis-args.json
+          echo '${{ inputs.kurtosis-cdk-args }}' | tee /tmp/kurtosis-args.json
 
       - name: Startup the kurtosis-cdk package
         run: |

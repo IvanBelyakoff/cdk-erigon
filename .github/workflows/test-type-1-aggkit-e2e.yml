@@ -54,6 +54,8 @@ jobs:
           .args.cdk_erigon_node_image        = "cdk-erigon-type1:local"   |
           .args.gas_token_enabled            = false                      |
           .args.enable_aggkit_claim_sponsor  = true                       |
+          .args.zkevm_honour_chainspec       = true                       |
+          .args.zkevm_initial_commitment     = "pmt"                      |
           .deployment_stages.deploy_l2_contracts = false
           ' ./.github/test_e2e_single_chain_fork12_pessimistic_args.json)
           echo "fork12_pessimistic_args=${CONTENT}" >> $GITHUB_OUTPUT
