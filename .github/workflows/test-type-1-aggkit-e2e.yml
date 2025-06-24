@@ -5,7 +5,7 @@ name: Bats E2E Tests Type 1 aggkit bridge
 on:
   pull_request:
     branches:
-      - project/pp2
+      - project/pp3
     types:
       - opened
       - reopened

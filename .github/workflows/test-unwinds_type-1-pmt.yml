@@ -2,7 +2,7 @@ name: Unwinds tests type-1 PMT
 on:
   pull_request:
     branches:
-      - project/pp2
+      - project/pp3
   workflow_dispatch:
 
 jobs:
