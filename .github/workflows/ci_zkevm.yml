@@ -30,8 +30,15 @@ env:
 jobs:
   kurtosis-cdk-type-1-pectra-pmt:
     runs-on: ubuntu-latest
+    # runs-on: [ self-hosted, local ]   # only runners labelled “local”
+    # container:
+    #   image: ghcr.io/ivanbelyakoff/ci-image:latest
+    #   options: >-
+    #     --volume /var/run/docker.sock:/var/run/docker.sock
+    #     --user root
     steps:
       - name: Checkout cdk-erigon
+        if: ${{ !contains(runner.labels, 'local') }}
         uses: actions/checkout@v4
 
       - name: Setup kurtosis
