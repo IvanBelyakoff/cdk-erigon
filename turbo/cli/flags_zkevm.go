@@ -21,8 +21,9 @@ import (
 )
 
 var DeprecatedFlags = map[string]string{
-	"zkevm.gasless":       "zkevm.allow-free-transactions",
-	"zkevm.rpc-ratelimit": "",
+	"zkevm.gasless":            "zkevm.allow-free-transactions",
+	"zkevm.rpc-ratelimit":      "",
+	"zkevm.datastream-version": "",
 }
 
 func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
@@ -100,6 +101,9 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		sequencerEmptyBlockSealTime, err = time.ParseDuration(sequencerEmptyBlockSealTimeVal)
 		if err != nil {
 			panic(fmt.Sprintf("could not parse sequencer empty block seal time timeout value %s", sequencerEmptyBlockSealTimeVal))
+		}
+		if sequencerEmptyBlockSealTime < sequencerBlockSealTime {
+			panic(fmt.Sprintf("sequencer empty block seal time (%s) must be greater than or equal to sequencer block seal time (%s)", sequencerEmptyBlockSealTime, sequencerBlockSealTime))
 		}
 	}
 

@@ -5,7 +5,7 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
-      - project/**
+      - project/pp3
   workflow_dispatch:
 
 jobs:

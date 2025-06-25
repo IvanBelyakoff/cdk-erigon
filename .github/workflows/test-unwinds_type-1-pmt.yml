@@ -2,7 +2,7 @@ name: Unwinds tests type-1 PMT
 on:
   pull_request:
     branches:
-      - project/pp2
+      - project/pp3
   workflow_dispatch:
 
 jobs:
@@ -42,7 +42,7 @@ jobs:
           chmod +x ./zk/tests/unwinds/unwind.sh
           dsDir=dynamic-integration8-normalcy-pmt-prague
           dsFile=dynamic-integration8-normalcy-pmt-prague.tar.gz
-          firstStop=505
+          firstStop=678
           secondStop=1000
-          unwindToBatch=127
+          unwindToBatch=18
           ./zk/tests/unwinds/unwind.sh $dsDir $dsFile $firstStop $secondStop $unwindToBatch
